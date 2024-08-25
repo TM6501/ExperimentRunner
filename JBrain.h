@@ -328,11 +328,13 @@ namespace JBrain
 		// Dendrite version requires the parent neuron:
 		void applyCGP(JDendrite& dendrite, const JNeuron& parentNeuron);
 		std::vector<double> getCGPInputs(const JDendrite& dendrite, const JNeuron& parentNeuron);
-		void applyCGPOutputs(JDendrite& dendrite, const std::vector<double>& cgpOutputs);
+		void applyCGPOutputs(JDendrite& dendrite, const std::vector<double>& cgpOutputs,
+			const JNeuron& parentNeuron);
 
 		void applyCGP(JAxon& axon, const JNeuron& parentNeuron);
 		std::vector<double> getCGPInputs(const JAxon& axon, const JNeuron& parentNeuron);
-		void applyCGPOutputs(JAxon& axon, const std::vector<double>& cgpOutputs);
+		void applyCGPOutputs(JAxon& axon, const std::vector<double>& cgpOutputs,
+			const JNeuron& parentNeuron);
 
 		// With neuron health values all updated, kill/duplicate those that have
 		// crossed those thresholds.

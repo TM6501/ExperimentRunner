@@ -1090,7 +1090,7 @@ namespace JBrain
 		std::vector<double> dCGPInputs = getCGPInputs(dendrite, parentNeuron);
 		std::vector<double> dCGPOutputs = m_CGPDendriteUpdater->
 			calculateOutputs(dCGPInputs);
-		applyCGPOutputs(dendrite, dCGPOutputs);
+		applyCGPOutputs(dendrite, dCGPOutputs, parentNeuron);
 	}
 
 	void JBrain::applyCGP(JAxon& axon, const JNeuron& parentNeuron)
@@ -1098,7 +1098,7 @@ namespace JBrain
 		std::vector<double> aCGPInputs = getCGPInputs(axon, parentNeuron);
 		std::vector<double> aCGPOutputs = m_CGPAxonUpdater->
 			calculateOutputs(aCGPOutputs);
-		applyCGPOutputs(axon, aCGPOutputs);
+		applyCGPOutputs(axon, aCGPOutputs, parentNeuron);
 	}
 
 	void JBrain::applyCGPOutputs(JNeuron& neuron, const std::vector<double>& cgpOutputs)
@@ -1124,7 +1124,8 @@ namespace JBrain
 		}
 	}
 
-	void JBrain::applyCGPOutputs(JAxon& axon, const std::vector<double>& cgpOutputs)
+	void JBrain::applyCGPOutputs(JAxon& axon, const std::vector<double>& cgpOutputs,
+		const JNeuron& parentNeuron)
 	{
 		// Track the current output being used:
 		unsigned int cgpIdx = 0;
@@ -1142,7 +1143,6 @@ namespace JBrain
 				++cgpIdx;
 				axon.m_Z += static_cast<float>(cgpOutputs[cgpIdx]);
 				++cgpIdx;
-				axon.constrainLocation(0.0, 0.0, 0.0, m_brainXSize, m_brainYSize, m_brainZSize);
 				break;
 
 			case CGP::CGP_OUTPUT::HEALTH:
@@ -1151,9 +1151,14 @@ namespace JBrain
 				break;
 			}
 		}
+		// Ensure we stay in a valid location:
+		axon.constrainLocation(0.0, 0.0, 0.0, m_brainXSize, m_brainYSize, m_brainZSize);
+		axon.constrainLength(parentNeuron.m_X, parentNeuron.m_Y, parentNeuron.m_Z,
+			m_axonMaxLength);
 	}
 
-	void JBrain::applyCGPOutputs(JDendrite& dendrite, const std::vector<double>& cgpOutputs)
+	void JBrain::applyCGPOutputs(JDendrite& dendrite, const std::vector<double>& cgpOutputs,
+		const JNeuron& parentNeuron)
 	{
 		// Sometimes, a dendrite output may take more than one cgpOutput.
 		unsigned int cgpIdx = 0;
@@ -1171,8 +1176,7 @@ namespace JBrain
 				dendrite.m_Y += static_cast<float>(cgpOutputs[cgpIdx]);
 				++cgpIdx;
 				dendrite.m_Z += static_cast<float>(cgpOutputs[cgpIdx]);
-				++cgpIdx;
-				dendrite.constrainLocation(0.0, 0.0, 0.0, m_brainXSize, m_brainYSize, m_brainZSize);
+				++cgpIdx;				
 				break;
 
 			case CGP::CGP_OUTPUT::CLOSER_TO_STRONGEST_INPUT:
@@ -1184,7 +1188,6 @@ namespace JBrain
 				dendrite.m_X += (dendrite.m_biggestInputX - dendrite.m_X) * moveVal;
 				dendrite.m_Y += (dendrite.m_biggestInputY - dendrite.m_Y) * moveVal;
 				dendrite.m_Z += (dendrite.m_biggestInputZ - dendrite.m_Z) * moveVal;
-				dendrite.constrainLocation(0.0, 0.0, 0.0, m_brainXSize, m_brainYSize, m_brainZSize);
 				++cgpIdx;
 				break;
 
@@ -1194,8 +1197,7 @@ namespace JBrain
 				moveVal = static_cast<float>(cgpOutputs[cgpIdx]);
 				dendrite.m_X += (dendrite.m_nearestAxonX - dendrite.m_X) * moveVal;
 				dendrite.m_Y += (dendrite.m_nearestAxonY - dendrite.m_Y) * moveVal;
-				dendrite.m_Z += (dendrite.m_nearestAxonZ - dendrite.m_Z) * moveVal;
-				dendrite.constrainLocation(0.0, 0.0, 0.0, m_brainXSize, m_brainYSize, m_brainZSize);
+				dendrite.m_Z += (dendrite.m_nearestAxonZ - dendrite.m_Z) * moveVal;				
 				++cgpIdx;
 				break;
 
@@ -1211,6 +1213,10 @@ namespace JBrain
 				break;
 			}
 		}
+		// Make sure that after we move, we are still in a valid location:
+		dendrite.constrainLocation(0.0, 0.0, 0.0, m_brainXSize, m_brainYSize, m_brainZSize);
+		dendrite.constrainLength(parentNeuron.m_X, parentNeuron.m_Y, parentNeuron.m_Z,
+			m_dendriteMaxLength);
 	}
 
 	std::vector<double> JBrain::getCGPInputs(const JDendrite& dendrite,
@@ -2619,5 +2625,16 @@ namespace JBrain
 			(fabs(lhs.m_health - rhs.m_health) < FLT_EPSILON) &&
 			(lhs.m_neuronNumber == rhs.m_neuronNumber) &&
 			(lhs.m_age == rhs.m_age);
+	}
+
+	float euclideanDist(const float& x1, const float& y1, const float& z1,
+		const float& x2, const float& y2, const float& z2)
+	{
+		float dx = fabsf(x1 - x2);
+		float dy = fabsf(y1 - y2);
+		float dz = fabsf(z1 - z2);
+
+		// sqrt (dx2 + dy2 + dz2)
+		return powf((dx * dx) + (dy * dy) + (dz * dz), 0.5);
 	}
 }  // End namespace JBrain
