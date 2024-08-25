@@ -1176,7 +1176,7 @@ namespace JBrain
 				dendrite.m_Y += static_cast<float>(cgpOutputs[cgpIdx]);
 				++cgpIdx;
 				dendrite.m_Z += static_cast<float>(cgpOutputs[cgpIdx]);
-				++cgpIdx;				
+				++cgpIdx;
 				break;
 
 			case CGP::CGP_OUTPUT::CLOSER_TO_STRONGEST_INPUT:
@@ -1197,7 +1197,7 @@ namespace JBrain
 				moveVal = static_cast<float>(cgpOutputs[cgpIdx]);
 				dendrite.m_X += (dendrite.m_nearestAxonX - dendrite.m_X) * moveVal;
 				dendrite.m_Y += (dendrite.m_nearestAxonY - dendrite.m_Y) * moveVal;
-				dendrite.m_Z += (dendrite.m_nearestAxonZ - dendrite.m_Z) * moveVal;				
+				dendrite.m_Z += (dendrite.m_nearestAxonZ - dendrite.m_Z) * moveVal;
 				++cgpIdx;
 				break;
 
@@ -1209,6 +1209,8 @@ namespace JBrain
 
 			case CGP::CGP_OUTPUT::WEIGHT:
 				dendrite.m_weight += static_cast<float>(cgpOutputs[cgpIdx]);
+				dendrite.m_weight = fminf(fmaxf(dendrite.m_weight, m_dendriteMinWeight),
+					m_dendriteMaxWeight);
 				++cgpIdx;
 				break;
 			}
