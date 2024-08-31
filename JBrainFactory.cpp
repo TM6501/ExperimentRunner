@@ -467,6 +467,7 @@ namespace JBrain
 					
 		JBrain* retBrain = new JBrain(	
 			getNextBrainName(), // Name
+			"JBrainFactory", // Parent's name.
 			static_cast<unsigned int>(getConfigAsInt(m_brainConfig, "InputCount")), // observationSize
 			static_cast<unsigned int>(getConfigAsInt(m_brainConfig, "OutputCount")),  // actionSize
 			getFloatFromConfigRange(m_dendriteConfig, "MinMinLength", "MaxMinLength"), //dendriteMinLength
@@ -865,6 +866,10 @@ namespace JBrain
 			temp->m_CGPMonolithicUpdater->mutateSelf(CGP::MUTATION_STRATEGY::ACTIVE_GENE);
 			retVal.push_back(temp);
 		}
+
+		// Set all of the child brain's parent-names to the parent:
+		for (auto& brain : retVal)
+			brain->m_parentName = parent->m_name;
 
 		// Add the parent back into the population:
 		retVal.push_back(parent);

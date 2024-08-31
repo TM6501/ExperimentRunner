@@ -54,6 +54,7 @@ namespace JBrain
 	private:
 		// Give each brain a name for debugging purposes:
 		std::string m_name;
+		std::string m_parentName;
 
 		// Environment action and observation sizes. Eventually, this
 		// will become mutable:
@@ -349,6 +350,7 @@ namespace JBrain
 		
 	public:
 		inline std::string getName() { return m_name; }
+		inline std::string getParentName() { return m_parentName; }
 		inline unsigned int getNeuronCount()
 		{ return static_cast<unsigned int>(m_neurons.size()); }
 		
@@ -376,10 +378,12 @@ namespace JBrain
 		bool setValueByName(const std::string& name, const float& value);
 		bool setValueByName(const std::string& name, const int& value);
 		bool setValueByName(const std::string& name, const bool& value, bool flipBool);
+		bool setValueByName(const std::string& name, const std::string& value);
 
 		~JBrain();
 		JBrain(const JBrain& other);
 		JBrain(const std::string& name,
+			const std::string& parentName,
 			const unsigned int& observationSize,
 			const unsigned int& actionSize,
 			const float& dendriteMinLength,

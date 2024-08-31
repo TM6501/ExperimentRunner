@@ -17,6 +17,7 @@ namespace JBrain
 	// They must be provided in the same order as they are declared
 	// in the header file to prevent Visual Studio from having a conniption.
 	JBrain::JBrain(const std::string& name,
+		const std::string& parentName,
 		const unsigned int& observationSize,
 		const unsigned int& actionSize,
 		const float& dendriteMinLength,
@@ -91,6 +92,7 @@ namespace JBrain
 		const std::vector<std::function<double(double, double, double)> >& functionList,
 		const bool& needInitializeUpdatersAndConnections):
 	m_name(name),
+		m_parentName(parentName),
 		m_observationSize(observationSize),
 		m_actionSize(actionSize),
 		m_dendriteMinLength(dendriteMinLength),
@@ -220,8 +222,8 @@ namespace JBrain
 	}
 
 	JBrain::JBrain(const JBrain& other)
-		: JBrain(other.m_name, other.m_observationSize, other.m_actionSize,
-			other.m_dendriteMinLength, other.m_dendriteMaxLength,
+		: JBrain(other.m_name, other.m_parentName, other.m_observationSize,
+			other.m_actionSize, other.m_dendriteMinLength, other.m_dendriteMaxLength,
 			other.m_dendriteMinCount, other.m_dendriteMaxCount,
 			other.m_dendriteMinWeight, other.m_dendriteMaxWeight,
 			other.m_axonMinLength, other.m_axonMaxLength, other.m_axonMinCount,
@@ -1574,6 +1576,7 @@ namespace JBrain
 		// A lot of variables to compare:
 		return areEqual(m_CGPDendriteUpdater, rhs.m_CGPDendriteUpdater) &&
 			(m_name == rhs.m_name) &&
+			(m_parentName == rhs.m_parentName) &&
 			(m_observationSize == rhs.m_observationSize) &&
 			(m_actionSize == rhs.m_actionSize) &&
 			(m_outputDendrites == rhs.m_outputDendrites) &&
@@ -1785,6 +1788,7 @@ namespace JBrain
 
 		// Need the rest of the brain variables
 		j["name"] = m_name;
+		j["parentName"] = m_parentName;
 		j["observationSize"] = m_observationSize;
 		j["actionSize"] = m_actionSize;
 		j["dendriteMinLength"] = m_dendriteMinLength;
@@ -2016,6 +2020,7 @@ namespace JBrain
 				
 		JBrain* retVal = new JBrain(
 			j["name"].get<std::string>(),
+			j["parentName"].get<std::string>(),
 			j["observationSize"].get<unsigned int>(),
 			j["actionSize"].get<unsigned int>(),
 			j["dendriteMinLength"].get<float>(),
@@ -2409,6 +2414,20 @@ namespace JBrain
 		return retVal;
 	}
 
+	bool JBrain::setValueByName(const std::string& name, const std::string& value)
+	{
+		bool retVal = true;
+
+		if (name == "name")
+			m_name = value;
+		else if (name == "parentName")
+			m_parentName = value;
+		else
+			retVal = false;
+
+		return retVal;
+	}
+
 	bool JBrain::setValueByName(const std::string& name, const bool& value, bool flipBool)
 	{
 		bool retVal = true;  // Set to false if we don't find the name
@@ -2477,6 +2496,7 @@ namespace JBrain
 	void JBrain::writeSelfHumanReadable(std::ostream& out)
 	{
 		out << "----- Begin Brain: " << m_name << " -----" << std::endl;
+		out << "\t Parent's name: " << m_parentName << std::endl;
 		out << "\tDendrite Length: " << m_dendriteMinLength << " - " << m_dendriteMaxLength << std::endl;
 		out << "\tDendrite Count: " << m_dendriteMinCount << " - " << m_dendriteMaxCount << std::endl;
 		out << "\tAxon Length: " << m_axonMinLength << " - " << m_axonMaxLength << std::endl;
