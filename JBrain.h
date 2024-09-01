@@ -240,6 +240,11 @@ namespace JBrain
 		std::vector<int> m_brainChoices;
 		unsigned int m_inputProcessingsSinceLastUpdate;
 
+		// Data recorded for a full trial:
+		std::vector<double> m_initialObservation;
+		unsigned int m_totalTrialInputsProcessed;
+		unsigned int m_totalTrialSageChoiceMatches;
+
 		// Our output csv file:
 		std::ofstream* m_outputCSV;
 
@@ -369,8 +374,11 @@ namespace JBrain
 		// choice is the argMax of the output and only functions properly when
 		// the environment in question is a single choice output, like CartPole.
 		// Leaving the choice as -1 indicates that it isn't provided.
+		// The brain records certain data at the start of a new test trial
+		// in a given environment, newTrial=true should be set at the beginning
+		// of any trial run.
 		std::vector<double> processInput(const std::vector<double>& inputs,
-			int sageChoice=-1);
+			int sageChoice=-1, bool newTrial=false);
 
 		bool operator==(const JBrain& rhs);
 

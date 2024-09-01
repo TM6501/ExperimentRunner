@@ -176,6 +176,8 @@ namespace JBrain
 		m_functionStringList(functionStringList),
 		m_functionList(functionList),
 		m_inputProcessingsSinceLastUpdate(0),
+		m_totalTrialInputsProcessed(0),
+		m_totalTrialSageChoiceMatches(0),
 		m_outputCSV(nullptr)
 	{
 		// Same size required?
@@ -518,8 +520,17 @@ namespace JBrain
 	}
 
 	std::vector<double> JBrain::processInput(const std::vector<double>& inputs,
-		int sageChoice)
+		int sageChoice, bool newTrial)
 	{
+		// If this is the first observation of a new run, record the inputs
+		// and reset some variables:
+		if (newTrial)
+		{
+			m_initialObservation = inputs;
+			m_totalTrialInputsProcessed = 0;
+			m_totalTrialSageChoiceMatches = 0;
+		}
+
 		// Check to see if we should reset, and do it if so:
 		resetBrainForNewInputs();
 				
@@ -531,6 +542,8 @@ namespace JBrain
 			singleTimeStepForward();
 	
 		std::vector<double> brainOut = readBrainOutputs();
+		int brainChoice = static_cast<int>(std::distance(
+			brainOut.begin(), std::max_element(brainOut.begin(), brainOut.end())));
 		
 		if (sageChoice >= 0)  // We care about the sage choice:
 		{
@@ -538,10 +551,13 @@ namespace JBrain
 
 			// Distance between the beginning of the vector and the
 			// location of the max value in the vector:
-			m_brainChoices.push_back(static_cast<int>(
-				std::distance(brainOut.begin(), std::max_element(brainOut.begin(),
-					brainOut.end()))));
+			m_brainChoices.push_back(brainChoice);
 		}
+
+		// Record full-run data:
+		++m_totalTrialInputsProcessed;
+		if (brainChoice == sageChoice)
+			++m_totalTrialSageChoiceMatches;
 
 		updateAfterProcessingInput();
 
@@ -2193,7 +2209,16 @@ namespace JBrain
 		}
 
 		// Write the first line (column headers) to the csv:
-		*m_outputCSV << "neuronCount,avgNeuronHealth,dendriteCount,axonCount,score" << std::endl;
+		*m_outputCSV << "neuronCount,avgNeuronHealth,dendriteCount,axonCount,score,sagePercent";
+
+		// Include the scenario's initial conditions:
+		for (unsigned int i = 0; i < m_observationSize; ++i)
+		{
+			*m_outputCSV << ",initObs_" << i;
+		}
+
+		*m_outputCSV << std::endl;
+
 		return true;
 	}
 
@@ -2206,11 +2231,22 @@ namespace JBrain
 			return;
 		}
 		
-		*m_outputCSV << static_cast<unsigned int>(m_neurons.size())
-			<< "," << getAverageNeuronHealth()
-			<< "," << getDendriteCount() 
-			<< "," << getAxonCount()
-			<< "," << score << std::endl;
+		*m_outputCSV << static_cast<unsigned int>(m_neurons.size()) // Neuron count
+			<< "," << getAverageNeuronHealth() // avgNeuronHealth
+			<< "," << getDendriteCount()  // dendriteCount
+			<< "," << getAxonCount() // axonCount
+			<< "," << score; // score
+
+		double sageMatchPercent = static_cast<double>(m_totalTrialSageChoiceMatches) /
+			static_cast<double>(m_totalTrialInputsProcessed);
+
+		*m_outputCSV << "," << sageMatchPercent;
+
+		// Output the initial observation:
+		for (auto& obs : m_initialObservation)
+			*m_outputCSV << "," << obs;
+
+		*m_outputCSV << std::endl;
 	}
 
 	void JBrain::closeCSVOutputFile()
