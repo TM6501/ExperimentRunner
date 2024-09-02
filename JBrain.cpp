@@ -49,6 +49,8 @@ namespace JBrain
 		const float& neuronDuplicateHealth,
 		const float& neuronDeathDuplicateHealthThresholdMultiplier,
 		const float& neuronDuplicationHealthChange,
+		const bool& neuronDuplicationHealthReset,
+		const CGP::JNEURON_ACTIVATION_FUNCTION& neuronActivationFunction,
 		const float& neuronFireSpaceDeterioration,
 		const float& neuronFireTimeDeterioration,
 		const unsigned int& neuronFireLifetime,
@@ -125,6 +127,8 @@ namespace JBrain
 		m_neuronDuplicateHealth(neuronDuplicateHealth),
 		m_neuronDuplicateHealth_Original(neuronDuplicateHealth),
 		m_neuronDuplicationHealthChange(neuronDuplicationHealthChange),
+		m_neuronDuplicationHealthReset(neuronDuplicationHealthReset),
+		m_jNeuronActivationFunction(neuronActivationFunction),
 		m_neuronDeathDuplicateHealthThresholdMultiplier(neuronDeathDuplicateHealthThresholdMultiplier),
 		m_neuronFireSpaceDeterioration(neuronFireSpaceDeterioration),
 		m_neuronFireTimeDeterioration(neuronFireTimeDeterioration),
@@ -241,11 +245,12 @@ namespace JBrain
 			other.m_neuronCGPOutputHealthChangeAmount,
 			other.m_neuronDeathHealth_Original, other.m_neuronDuplicateHealth_Original,
 			other.m_neuronDeathDuplicateHealthThresholdMultiplier,
-			other.m_neuronDuplicationHealthChange, other.m_neuronFireSpaceDeterioration,
+			other.m_neuronDuplicationHealthChange, other.m_neuronDuplicationHealthReset,
+			other.m_jNeuronActivationFunction, other.m_neuronFireSpaceDeterioration,
 			other.m_neuronFireTimeDeterioration, other.m_neuronFireLifetime,
-			other.m_usePreTrainSleep, other.m_usePostTrainSleep,
-			other.m_brainXSize, other.m_brainYSize, other.m_brainZSize,
-			other.m_brainUseSameDimensions, other.m_brainResetBeforeProcessingInput,
+			other.m_usePreTrainSleep, other.m_usePostTrainSleep, other.m_brainXSize,
+			other.m_brainYSize, other.m_brainZSize, other.m_brainUseSameDimensions,
+			other.m_brainResetBeforeProcessingInput,
 			other.m_brainProcessingStepsBetweenInputAndOutput,
 			other.m_brainInputsOnOneSide, other.m_brainOutputsOnOneSide,
 			other.m_circuitMinDimensions, other.m_circuitMaxDimensions,
@@ -938,6 +943,26 @@ namespace JBrain
 		}
 	}
 
+	float JBrain::applyJNeuronActivationFunction(const float& input)
+	{
+		float retVal = input;
+		static float e = 2.718281828459045235360284171352;
+
+		// Ignore the "none" case:
+		switch (m_jNeuronActivationFunction)
+		{
+		case CGP::JNEURON_ACTIVATION_FUNCTION::SIGMOID:
+			retVal = 1.0f / (1.0f + powf(e, -retVal));
+			break;
+
+		case CGP::JNEURON_ACTIVATION_FUNCTION::TANH:
+			retVal = tanhf(input);
+			break;
+		}
+
+		return retVal;
+	}
+
 	void JBrain::incrementAllNeuronFireAges()
 	{
 		// Better way would be to define a "tooOld" lambda function and
@@ -988,6 +1013,8 @@ namespace JBrain
 			{
 				totalDendriteInputs += getDendriteInput(neuron.m_dendrites[i]);
 			}
+
+			totalDendriteInputs = applyJNeuronActivationFunction(totalDendriteInputs);
 
 			// Neuron firing is either probabilistic or based on a threshold value
 			// being exceeded:
@@ -1624,6 +1651,8 @@ namespace JBrain
 			(fabs(m_neuronDuplicateHealth_Original - rhs.m_neuronDuplicateHealth_Original) < FLT_EPSILON) &&
 			(fabs(m_neuronDeathDuplicateHealthThresholdMultiplier - rhs.m_neuronDeathDuplicateHealthThresholdMultiplier) < FLT_EPSILON) &&
 			(fabs(m_neuronDuplicationHealthChange - rhs.m_neuronDuplicationHealthChange) < FLT_EPSILON) &&
+			(m_neuronDuplicationHealthReset == rhs.m_neuronDuplicationHealthReset) &&
+			(m_jNeuronActivationFunction == rhs.m_jNeuronActivationFunction) &&
 			(m_neuronFires == rhs.m_neuronFires) &&
 			(fabs(m_neuronFireSpaceDeterioration - rhs.m_neuronFireSpaceDeterioration) < FLT_EPSILON) &&
 			(fabs(m_neuronFireTimeDeterioration - rhs.m_neuronFireTimeDeterioration) < FLT_EPSILON) &&
@@ -1838,6 +1867,8 @@ namespace JBrain
 		j["neuronDuplicateHealth_Original"] = m_neuronDuplicateHealth_Original;
 		j["neuronDeathDuplicateHealthThresholdMultiplier"] = m_neuronDeathDuplicateHealthThresholdMultiplier;
 		j["neuronDuplicationHealthChange"] = m_neuronDuplicationHealthChange;
+		j["neuronDuplicationHealthReset"] = m_neuronDuplicationHealthReset;
+		j["jNeuronActivationFunction"] = CGP::ActivationFunctionToString(m_jNeuronActivationFunction);
 		j["neuronFireSpaceDeterioration"] = m_neuronFireSpaceDeterioration;
 		j["neuronFireTimeDeterioration"] = m_neuronFireTimeDeterioration;
 		j["neuronFireLifetime"] = m_neuronFireLifetime;
@@ -2068,6 +2099,8 @@ namespace JBrain
 			j["neuronDuplicateHealth"].get<float>(),
 			j["neuronDeathDuplicateHealthThresholdMultiplier"].get<float>(),
 			j["neuronDuplicationHealthChange"].get<float>(),
+			j["neuronDuplicationHealthReset"].get<bool>(),
+			CGP::StringToActivationFunction(j["jNeuronActivationFunction"].get<std::string>()),
 			j["neuronFireSpaceDeterioration"].get<float>(),
 			j["neuronFireTimeDeterioration"].get<float>(),
 			j["neuronFireLifetime"].get<unsigned int>(),			
@@ -2479,6 +2512,11 @@ namespace JBrain
 				m_neuronDuplicateNearby = !m_neuronDuplicateNearby;
 			else
 				m_neuronDuplicateNearby = value;
+		else if (name == "NeuronDuplicationHealthReset")
+			if (flipBool)
+				m_neuronDuplicationHealthReset = !m_neuronDuplicationHealthReset;
+			else
+				m_neuronDuplicationHealthReset = value;
 		else if (name == "UsePreTrainSleep")
 			if (flipBool)
 				m_usePreTrainSleep = !m_usePreTrainSleep;
@@ -2542,6 +2580,8 @@ namespace JBrain
 		out << "\tNeuron Fire Value Range: " << m_neuronMinFireValue << " - " << m_neuronMaxFireValue << std::endl;
 		out << "\tNeuron Refractory Period: " << m_neuronRefractoryPeriod << std::endl;
 		out << "\tNeuron Duplicate Nearby: " << m_neuronDuplicateNearby << std::endl;
+		out << "\tNeuron duplication health reset: " << m_neuronDuplicationHealthReset << std::endl;
+		out << "\tJNeuron activation function: " << CGP::ActivationFunctionToString(m_jNeuronActivationFunction) << std::endl;
 		out << "\tNeuron Nearby Distance: " << m_neuronMinNearbyDistance << " - " << m_neuronMaxNearbyDistance << std::endl;
 		out << "\tUse Pre-Train Sleep: " << m_usePreTrainSleep << std::endl;
 		out << "\tUse Post-Train Sleep: " << m_usePostTrainSleep << std::endl;

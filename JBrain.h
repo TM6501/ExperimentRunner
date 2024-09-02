@@ -103,6 +103,13 @@ namespace JBrain
 		
 		// Getting duplicated changes a neuron's health value:
 		float m_neuronDuplicationHealthChange;
+		// If True, ignore m_neuronDuplicationHealthChange and instead
+		// reset the duplicated neuron's health back to a value within
+		// the random starting health values:
+		bool m_neuronDuplicationHealthReset;
+
+		// The activation function used by each JNeuron:
+		CGP::JNEURON_ACTIVATION_FUNCTION m_jNeuronActivationFunction;
 
 		// Tracking where/when neurons fired and how their values are read in
 		// from other dendrites:
@@ -306,6 +313,10 @@ namespace JBrain
 		// Take the appropriate number of single time steps forward
 		std::vector<double> readBrainOutputs();
 
+		// Take the total input from a neuron's dendrites and apply the
+		// selected activation function:
+		float applyJNeuronActivationFunction(const float& input);
+
 		// Run any post-brain-processing updates. This may involve running
 		// the CGP update functions:
 		void updateAfterProcessingInput();
@@ -358,7 +369,11 @@ namespace JBrain
 		inline std::string getParentName() { return m_parentName; }
 		inline unsigned int getNeuronCount()
 		{ return static_cast<unsigned int>(m_neurons.size()); }
-		
+
+		// Get/Set the JNeuron activation function:
+		inline CGP::JNEURON_ACTIVATION_FUNCTION getJNeuronActivationFunction() { return m_jNeuronActivationFunction; }
+		inline void setValue(CGP::JNEURON_ACTIVATION_FUNCTION newActFun) { m_jNeuronActivationFunction = newActFun; }
+
 		// For recording data. Later, we may make the data columns
 		// configurable in the yaml, but for the sake of speed, they
 		// will be hard coded for now:
@@ -404,7 +419,7 @@ namespace JBrain
 			const float& axonMaxLength,
 		    const unsigned int& axonMinCount,
 			const unsigned int& axonMaxCount,
-			const bool& neuronProbabilisticFire,
+			const bool& neuronProbabilisticFire,			
 		    const float& neuronFireThreshold,
 			const float& neuronMinFireValue,
 			const float& neuronMaxFireValue,
@@ -423,6 +438,8 @@ namespace JBrain
 			const float& neuronDuplicateHealth,
 			const float& neuronDeathDuplicateHealthThresholdMultiplier,
 			const float& neuronDuplicationHealthChange,
+			const bool& neuronDuplicationHealthReset,
+			const CGP::JNEURON_ACTIVATION_FUNCTION& neuronActivationFunction,
 			const float& neuronFireSpaceDeterioration,
 			const float& neuronFireTimeDeterioration,
 			const unsigned int& neuronFireLifetime,

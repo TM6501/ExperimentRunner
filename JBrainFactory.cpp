@@ -134,6 +134,15 @@ namespace JBrain
 	bool JBrainFactory::checkNeuronConfig(const YAML::Node& config)
 	{
 		m_neuronConfig = config;
+
+		m_neuronActivationFunctions.clear();
+		for (unsigned int i = 0; i < m_neuronConfig["ActivationFunctions"].size(); ++i)
+		{
+			m_neuronActivationFunctions.push_back(
+				CGP::StringToActivationFunction(
+					m_neuronConfig["ActivationFunctions"][i].as<std::string>()));
+		}
+
 		return true;
 	}
 
@@ -402,6 +411,18 @@ namespace JBrain
 		);
 	}
 
+	CGP::JNEURON_ACTIVATION_FUNCTION JBrainFactory::getRandomJNeuronActivationFunction()
+	{
+		CGP::JNEURON_ACTIVATION_FUNCTION retVal = m_neuronActivationFunctions[0];
+		if (m_neuronActivationFunctions.size() > 1)
+		{
+			int idx = getRandomInt(0, static_cast<int>(m_neuronActivationFunctions.size() - 1));
+			retVal = m_neuronActivationFunctions[idx];
+		}
+
+		return retVal;
+	}
+
 	int JBrainFactory::getRandomInt(const int& min, const int& max)
 	{
 		// Random device and distribution don't need to be
@@ -499,6 +520,8 @@ namespace JBrain
 			getFloatFromConfigRange(m_neuronConfig, "MinStartingDuplicateHealth", "MaxStartingDuplicateHealth"), //  neuronDulicateHealth
 			getFloatFromConfigRange(m_neuronConfig, "MinHealthThresholdMultiplier", "MaxHealthThresholdMultiplier"), // neuronDeathDuplicateHealthThresholdMultiplier
 			getFloatFromConfigRange(m_neuronConfig, "MinNeuronDuplicateHealthChange", "MaxNeuronDuplicateHealthChange"), // neuronDuplicationHealthChange 
+			getConfigAsMutableBool(m_neuronConfig, "HealthResetAtDuplication"), // neuronDuplicationHealthReset
+			getRandomJNeuronActivationFunction(), // neuronActivationFunction
 			getFloatFromConfigRange(m_neuronConfig, "MinNeuronSpaceDeteriorationParameter", "MaxNeuronSpaceDeteriorationParameter"), // neuronFireSpaceDeterioration
 			getFloatFromConfigRange(m_neuronConfig, "MinNeuronTimeDeteriorationParameter", "MaxNeuronTimeDeteriorationParameter"), // neuronFireTimeDeterioration
 			static_cast<unsigned int>(getIntFromConfigRange(m_neuronConfig, "MinNeuronFireLifetime", "MaxNeuronFireLifetime")), //neuronFireLifetime
@@ -829,6 +852,22 @@ namespace JBrain
 
 			if (temp != nullptr)
 				retVal.push_back(temp);
+		}
+
+		// If there is more than one JNeuron activation function, mutate on that:
+		if (m_neuronActivationFunctions.size() > 1)
+		{
+			JBrain* temp = new JBrain(*parent);
+			CGP::JNEURON_ACTIVATION_FUNCTION initial = temp->getJNeuronActivationFunction();
+			CGP::JNEURON_ACTIVATION_FUNCTION mutVal = getRandomJNeuronActivationFunction();
+
+			// Make sure we are actually changing the value:
+			while (initial == mutVal)
+				mutVal = getRandomJNeuronActivationFunction();
+
+			temp->setValue(mutVal);
+
+			retVal.push_back(temp);
 		}
 
 		// Mutate each CGP program:

@@ -53,6 +53,9 @@ namespace JBrain
 		std::vector<std::string> m_mutableFunctions;  // Those set to mutable
 		void buildFunctionLists();  // Fill in the above vectors from m_equationsConfig
 
+		// Activation functions available to JNeurons:
+		std::vector<CGP::JNEURON_ACTIVATION_FUNCTION> m_neuronActivationFunctions;
+
 		// The input and output lists to the CGP programs:
 		std::vector<CGP::CGP_INPUT> m_dendriteInputs;
 		std::vector<CGP::CGP_OUTPUT> m_dendriteOutputs;
@@ -87,6 +90,8 @@ namespace JBrain
 
 		JBrain* getMutatedBrain_bool(JBrain* parent, const YAML::Node& config,
 			const std::string& configValueName, const std::string& brainValueName);
+
+		CGP::JNEURON_ACTIVATION_FUNCTION getRandomJNeuronActivationFunction();
 
 	public:
 		static JBrainFactory* getInstance();
