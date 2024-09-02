@@ -26,10 +26,19 @@ namespace JBrain
 		const unsigned int& dendriteMaxCount,
 		const float& dendriteMinWeight,
 		const float& dendriteMaxWeight,
+		const float& dendriteLowMoveAway,
+		const float& dendriteHighMoveToward,
+		const float& dendriteAwayTowardMoveAmount,
+		const float& dendriteLowWeightDecrease,
+		const float& dendriteHighWeightIncrease,
+		const float& dendriteWeightChangeAmount,
 		const float& axonMinLength,
 		const float& axonMaxLength,
 		const unsigned int& axonMinCount,
 		const unsigned int& axonMaxCount,
+		const float& axonLowMoveAway,
+		const float& axonHighMoveToward,
+		const float& axonAwayTowardMoveAmount,
 		const bool& neuronProbabilisticFire,
 		const float& neuronFireThreshold,
 		const float& neuronMinFireValue,
@@ -103,10 +112,19 @@ namespace JBrain
 		m_dendriteMaxCount(dendriteMaxCount),
 		m_dendriteMinWeight(dendriteMinWeight),
 		m_dendriteMaxWeight(dendriteMaxWeight),
+		m_dendriteLowMoveAway(dendriteLowMoveAway),
+		m_dendriteHighMoveToward(dendriteHighMoveToward),
+		m_dendriteAwayTowardMoveAmount(dendriteAwayTowardMoveAmount),
+		m_dendriteLowWeightDecrease(dendriteLowWeightDecrease),
+		m_dendriteHighWeightIncrease(dendriteHighWeightIncrease),
+		m_dendriteWeightChangeAmount(dendriteWeightChangeAmount),
 		m_axonMinLength(axonMinLength),
 		m_axonMaxLength(axonMaxLength),
 		m_axonMinCount(axonMinCount),
 		m_axonMaxCount(axonMaxCount),
+		m_axonLowMoveAway(axonLowMoveAway),
+		m_axonHighMoveToward(axonHighMoveToward),
+		m_axonAwayTowardMoveAmount(axonAwayTowardMoveAmount),
 		m_neuronProbabilisticFire(neuronProbabilisticFire),
 		m_neuronFireThreshold(neuronFireThreshold),
 		m_neuronMinFireValue(neuronMinFireValue),
@@ -232,8 +250,13 @@ namespace JBrain
 			other.m_actionSize, other.m_dendriteMinLength, other.m_dendriteMaxLength,
 			other.m_dendriteMinCount, other.m_dendriteMaxCount,
 			other.m_dendriteMinWeight, other.m_dendriteMaxWeight,
+			other.m_dendriteLowMoveAway, other.m_dendriteHighMoveToward,
+			other.m_dendriteAwayTowardMoveAmount, other.m_dendriteLowWeightDecrease,
+			other.m_dendriteHighWeightIncrease, other.m_dendriteWeightChangeAmount,
 			other.m_axonMinLength, other.m_axonMaxLength, other.m_axonMinCount,
-			other.m_axonMaxCount, other.m_neuronProbabilisticFire,
+			other.m_axonMaxCount, other.m_axonLowMoveAway,
+			other.m_axonHighMoveToward, other.m_axonAwayTowardMoveAmount,
+			other.m_neuronProbabilisticFire,
 			other.m_neuronFireThreshold, other.m_neuronMinFireValue,
 			other.m_neuronMaxFireValue, other.m_neuronRefractoryPeriod,
 			other.m_neuronDuplicateNearby, other.m_neuronMinNearbyDistance,
@@ -1244,6 +1267,25 @@ namespace JBrain
 				std::cout << "Axon health in CGP output params. Not yet implemented." << std::endl;
 				++cgpIdx;
 				break;
+
+			// If this value is lower than a set value or higher than a different
+			// set value, the axon moves a static amount. Otherwise, there is no movement:
+			case CGP::CGP_OUTPUT::NEAREST_DENDRITE_CLOSER_FURTHER:
+				if (cgpOutputs[cgpIdx] < m_axonLowMoveAway)
+				{
+					axon.m_X -= (axon.m_nearestDendriteX - axon.m_X) * m_axonAwayTowardMoveAmount;
+					axon.m_Y -= (axon.m_nearestDendriteY - axon.m_Y) * m_axonAwayTowardMoveAmount;
+					axon.m_Z -= (axon.m_nearestDendriteZ - axon.m_Z) * m_axonAwayTowardMoveAmount;
+				}
+				else if (cgpOutputs[cgpIdx] > m_axonHighMoveToward)
+				{
+					axon.m_X += (axon.m_nearestDendriteX - axon.m_X) * m_axonAwayTowardMoveAmount;
+					axon.m_Y += (axon.m_nearestDendriteY - axon.m_Y) * m_axonAwayTowardMoveAmount;
+					axon.m_Z += (axon.m_nearestDendriteZ - axon.m_Z) * m_axonAwayTowardMoveAmount;
+				}
+				// else: No movement.
+				++cgpIdx;
+				break;
 			}
 		}
 		// Ensure we stay in a valid location:
@@ -1296,6 +1338,42 @@ namespace JBrain
 				++cgpIdx;
 				break;
 
+			// If this value is lower than a set value or higher than a different
+			// set value, the dendrite moves a static amount. Otherwise, no movement:
+			case CGP::CGP_OUTPUT::NEAREST_AXON_CLOSER_FURTHER:
+				if (cgpOutputs[cgpIdx] < m_dendriteLowMoveAway)
+				{
+					dendrite.m_X -= (dendrite.m_nearestAxonX - dendrite.m_X) * m_dendriteAwayTowardMoveAmount;
+					dendrite.m_Y -= (dendrite.m_nearestAxonY - dendrite.m_Y) * m_dendriteAwayTowardMoveAmount;
+					dendrite.m_Z -= (dendrite.m_nearestAxonZ - dendrite.m_Z) * m_dendriteAwayTowardMoveAmount;
+				}
+				else if (cgpOutputs[cgpIdx] > m_dendriteHighMoveToward)
+				{
+					dendrite.m_X += (dendrite.m_nearestAxonX - dendrite.m_X) * m_dendriteAwayTowardMoveAmount;
+					dendrite.m_Y += (dendrite.m_nearestAxonY - dendrite.m_Y) * m_dendriteAwayTowardMoveAmount;
+					dendrite.m_Z += (dendrite.m_nearestAxonZ - dendrite.m_Z) * m_dendriteAwayTowardMoveAmount;
+				}
+				// else: No movement.
+				++cgpIdx;
+				break;
+
+			case CGP::CGP_OUTPUT::STRONGEST_INPUT_CLOSER_FURTHER:
+				if (cgpOutputs[cgpIdx] < m_dendriteLowMoveAway)
+				{
+					dendrite.m_X -= (dendrite.m_biggestInputX - dendrite.m_X) * m_dendriteAwayTowardMoveAmount;
+					dendrite.m_Y -= (dendrite.m_biggestInputY - dendrite.m_Y) * m_dendriteAwayTowardMoveAmount;
+					dendrite.m_Z -= (dendrite.m_biggestInputZ - dendrite.m_Z) * m_dendriteAwayTowardMoveAmount;
+				}
+				else if (cgpOutputs[cgpIdx] > m_dendriteHighMoveToward)
+				{
+					dendrite.m_X += (dendrite.m_biggestInputX - dendrite.m_X) * m_dendriteAwayTowardMoveAmount;
+					dendrite.m_Y += (dendrite.m_biggestInputY - dendrite.m_Y) * m_dendriteAwayTowardMoveAmount;
+					dendrite.m_Z += (dendrite.m_biggestInputZ - dendrite.m_Z) * m_dendriteAwayTowardMoveAmount;
+				}
+				// else: No movement.
+				++cgpIdx;
+				break;
+
 			// Dendrite health not yet implemented.
 			case CGP::CGP_OUTPUT::HEALTH:
 					std::cout << "Dendrite health in CGP output params. Not yet implemented." << std::endl;
@@ -1304,6 +1382,18 @@ namespace JBrain
 
 			case CGP::CGP_OUTPUT::WEIGHT:
 				dendrite.m_weight += static_cast<float>(cgpOutputs[cgpIdx]);
+				dendrite.m_weight = fminf(fmaxf(dendrite.m_weight, m_dendriteMinWeight),
+					m_dendriteMaxWeight);
+				++cgpIdx;
+				break;
+
+			case CGP::CGP_OUTPUT::WEIGHT_HIGHER_LOWER:
+				if (cgpOutputs[cgpIdx] < m_dendriteLowWeightDecrease)
+					dendrite.m_weight -= m_dendriteWeightChangeAmount;
+				else if (cgpOutputs[cgpIdx] > m_dendriteHighWeightIncrease)
+					dendrite.m_weight += m_dendriteWeightChangeAmount;
+
+				// Keep it in bounds:
 				dendrite.m_weight = fminf(fmaxf(dendrite.m_weight, m_dendriteMinWeight),
 					m_dendriteMaxWeight);
 				++cgpIdx;
@@ -1680,10 +1770,19 @@ namespace JBrain
 			(m_dendriteMaxCount == rhs.m_dendriteMaxCount) &&
 			(fabs(m_dendriteMinWeight - rhs.m_dendriteMinWeight) < FLT_EPSILON) &&
 			(fabs(m_dendriteMaxWeight - rhs.m_dendriteMaxWeight) < FLT_EPSILON) &&
+			(fabs(m_dendriteLowMoveAway - rhs.m_dendriteLowMoveAway) < FLT_EPSILON) &&
+			(fabs(m_dendriteHighMoveToward - rhs.m_dendriteHighMoveToward) < FLT_EPSILON) &&
+			(fabs(m_dendriteAwayTowardMoveAmount - rhs.m_dendriteAwayTowardMoveAmount) < FLT_EPSILON) &&
+			(fabs(m_dendriteLowWeightDecrease - rhs.m_dendriteLowWeightDecrease) < FLT_EPSILON) &&
+			(fabs(m_dendriteHighWeightIncrease - rhs.m_dendriteHighWeightIncrease) < FLT_EPSILON) &&
+			(fabs(m_dendriteWeightChangeAmount - rhs.m_dendriteWeightChangeAmount) < FLT_EPSILON) &&
 			(fabs(m_axonMinLength - rhs.m_axonMinLength) < FLT_EPSILON) &&
 			(fabs(m_axonMaxLength - rhs.m_axonMaxLength) < FLT_EPSILON) &&
 			(m_axonMinCount == rhs.m_axonMinCount) &&
 			(m_axonMaxCount == rhs.m_axonMaxCount) &&
+			(fabs(m_axonLowMoveAway - rhs.m_axonLowMoveAway) < FLT_EPSILON) &&
+			(fabs(m_axonHighMoveToward - rhs.m_axonHighMoveToward) < FLT_EPSILON) &&
+			(fabs(m_axonAwayTowardMoveAmount - rhs.m_axonAwayTowardMoveAmount) < FLT_EPSILON) &&
 			(m_neuronProbabilisticFire == rhs.m_neuronProbabilisticFire) &&
 			(fabs(m_neuronFireThreshold - rhs.m_neuronFireThreshold) < FLT_EPSILON) &&
 			(fabs(m_neuronMinFireValue - rhs.m_neuronMinFireValue) < FLT_EPSILON) &&
@@ -1892,10 +1991,19 @@ namespace JBrain
 		j["dendriteMaxCount"] = m_dendriteMaxCount;
 		j["dendriteMinWeight"] = m_dendriteMinWeight;
 		j["dendriteMaxWeight"] = m_dendriteMaxWeight;
+		j["dendriteLowMoveAway"] = m_dendriteLowMoveAway;
+		j["dendriteHighMoveToward"] = m_dendriteHighMoveToward;
+		j["dendriteAwayTowardMoveAmount"] = m_dendriteAwayTowardMoveAmount;
+		j["dendriteLowWeightDecrease"] = m_dendriteLowWeightDecrease;
+		j["dendriteHighWeightIncrease"] = m_dendriteHighWeightIncrease;
+		j["dendriteWeightChangeAmount"] = m_dendriteWeightChangeAmount;
 		j["axonMinLength"] = m_axonMinLength;
 		j["axonMaxLength"] = m_axonMaxLength;
 		j["axonMinCount"] = m_axonMinCount;
 		j["axonMaxCount"] = m_axonMaxCount;
+		j["axonLowMoveAway"] = m_axonLowMoveAway;
+		j["axonHighMoveToward"] = m_axonHighMoveToward;
+		j["axonAwayTowardMoveAmount"] = m_axonAwayTowardMoveAmount;
 		j["neuronProbabilisticFire"] = m_neuronProbabilisticFire;
 		j["neuronFireThreshold"] = m_neuronFireThreshold;
 		j["neuronMinFireValue"] = m_neuronMinFireValue;
@@ -2126,10 +2234,19 @@ namespace JBrain
 			j["dendriteMaxCount"].get<unsigned int>(),
 			j["dendriteMinWeight"].get<float>(),
 			j["dendriteMaxWeight"].get<float>(),
+			j["dendriteLowMoveAway"].get<float>(),
+			j["dendriteHighMoveToward"].get<float>(),
+			j["dendriteAwayTowardMoveAmount"].get<float>(),
+			j["dendriteLowWeightDecrease"].get<float>(),
+			j["dendriteHighWeightIncrease"].get<float>(),
+			j["dendriteWeightChangeAmount"].get<float>(),
 			j["axonMinLength"].get<float>(),
 			j["axonMaxLength"].get<float>(),
 			j["axonMinCount"].get<unsigned int>(),
 			j["axonMaxCount"].get<unsigned int>(),
+			j["axonLowMoveAway"].get<float>(),
+			j["axonHighMoveToward"].get<float>(),
+			j["axonAwayTowardMoveAmount"].get<float>(),
 			j["neuronProbabilisticFire"].get<bool>(),
 			j["neuronFireThreshold"].get<float>(),
 			j["neuronMinFireValue"].get<float>(),
@@ -2417,15 +2534,33 @@ namespace JBrain
 		if (name == "DendriteMinLength")
 			m_dendriteMinLength = value;
 		else if (name == "DendriteMaxLength")
-			m_dendriteMaxLength = value;		
+			m_dendriteMaxLength = value;
 		else if (name == "DendriteMinWeight")
 			m_dendriteMinWeight = value;
 		else if (name == "DendriteMaxWeight")
 			m_dendriteMaxWeight = value;
+		else if (name == "DendriteLowMoveAway")
+			m_dendriteLowMoveAway = value;
+		else if (name == "DendriteHighMoveToward")
+			m_dendriteHighMoveToward = value;
+		else if (name == "DendriteAwayTowardMoveAmount")
+			m_dendriteAwayTowardMoveAmount = value;
+		else if (name == "DendriteLowWeightDecrease")
+			m_dendriteLowWeightDecrease = value;
+		else if (name == "DendriteHighWeightIncrease")
+			m_dendriteHighWeightIncrease = value;
+		else if (name == "DendriteWeightChangeAmount")
+			m_dendriteWeightChangeAmount = value;
 		else if (name == "AxonMinLength")
 			m_axonMinLength = value;
 		else if (name == "AxonMaxLength")
 			m_axonMaxLength = value;
+		else if (name == "AxonLowMoveAway")
+			m_axonLowMoveAway = value;
+		else if (name == "AxonHighMoveToward")
+			m_axonHighMoveToward = value;
+		else if (name == "AxonAwayTowardMoveAmount")
+			m_axonAwayTowardMoveAmount = value;
 		else if (name == "NeuronFireThreshold")
 			m_neuronFireThreshold = value;
 		else if (name == "NeuronDuplicateMinNearbyDistance")

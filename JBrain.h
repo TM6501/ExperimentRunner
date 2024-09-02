@@ -74,11 +74,22 @@ namespace JBrain
 		float m_dendriteMinWeight;
 		float m_dendriteMaxWeight;
 
+		float m_dendriteLowMoveAway;
+		float m_dendriteHighMoveToward;
+		float m_dendriteAwayTowardMoveAmount;
+
+		float m_dendriteLowWeightDecrease;
+		float m_dendriteHighWeightIncrease;
+		float m_dendriteWeightChangeAmount;
+
 		// Axons:
 		float m_axonMinLength;
 		float m_axonMaxLength;
 		unsigned int m_axonMinCount;
 		unsigned int m_axonMaxCount;
+		float m_axonLowMoveAway;
+		float m_axonHighMoveToward;
+		float m_axonAwayTowardMoveAmount;
 
 		// Neurons:
 		bool m_neuronProbabilisticFire;  // If false, threshold fire is used.
@@ -419,10 +430,19 @@ namespace JBrain
 			const unsigned int& dendriteMaxCount,
 			const float& dendriteMinWeight,
 			const float& dendriteMaxWeight,
+			const float& dendriteLowMoveAway,
+			const float& dendriteHighMoveToward,
+			const float& dendriteAwayTowardMoveAmount,
+			const float& dendriteLowWeightDecrease,
+			const float& dendriteHighWeightIncrease,
+			const float& dendriteWeightChangeAmount,
 			const float& axonMinLength,
 			const float& axonMaxLength,
 		    const unsigned int& axonMinCount,
 			const unsigned int& axonMaxCount,
+			const float& axonLowMoveAway,
+			const float& axonHighMoveToward,
+			const float& axonAwayTowardMoveAmount,
 			const bool& neuronProbabilisticFire,
 		    const float& neuronFireThreshold,
 			const float& neuronMinFireValue,

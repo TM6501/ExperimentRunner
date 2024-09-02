@@ -215,6 +215,7 @@ namespace JBrain
 		  "NEURON_AGE", "NEURON_HEALTH" };
 
 		static std::vector<std::string> allOutputs{"LOCATION", "HEALTH", "WEIGHT",
+		"STRONGEST_INPUT_CLOSER_FURTHER", "NEAREST_AXON_CLOSER_FURTHER",
 		"CLOSER_TO_STRONGEST_INPUT", "CLOSER_TO_NEAREST_AXON"};
 		
 		m_dendriteInputs.clear();
@@ -246,7 +247,8 @@ namespace JBrain
 		  "DENDRITE_TYPE", "PERCENTAGE_FIRE", "PERCENTAGE_BRAIN_FIRE",
 		  "NEURON_AGE", "NEURON_HEALTH", "CURRENT_LENGTH"};
 
-		static std::vector<std::string> allOutputs{ "LOCATION", "HEALTH" };
+		static std::vector<std::string> allOutputs{ "LOCATION",
+			"NEAREST_DENDRITE_CLOSER_FURTHER", "HEALTH" };
 
 		m_axonInputs.clear();
 		m_axonOutputs.clear();
@@ -497,10 +499,19 @@ namespace JBrain
 			static_cast<unsigned int>(getIntFromConfigRange(m_dendriteConfig, "MinMaxCount", "MaxMaxCount")), // dendriteMaxCount
 			getFloatFromConfigRange(m_dendriteConfig, "MinMinWeight", "MaxMinWeight"), // dendriteMinWeight
 			getFloatFromConfigRange(m_dendriteConfig, "MinMaxWeight", "MaxMaxWeight"), // dendriteMaxWeight
+			getFloatFromConfigRange(m_dendriteConfig, "MinLowMoveAway", "MaxLowMoveAway"), // dendriteLowMoveAway
+			getFloatFromConfigRange(m_dendriteConfig, "MinHighMoveToward", "MaxHighMoveToward"), // dendriteHighMoveToward
+			getFloatFromConfigRange(m_dendriteConfig, "MinMoveAmount", "MaxMoveAmount"), // dendriteAwayTowardMoveAmount
+			getFloatFromConfigRange(m_dendriteConfig, "MinLowWeightDecrease", "MaxLowWeightDecrease"), // dendriteLowWeightDecrease
+			getFloatFromConfigRange(m_dendriteConfig, "MinHighWeightIncrease", "MaxHighWeightIncrease"), // dendriteHighWeightIncrease
+			getFloatFromConfigRange(m_dendriteConfig, "MinWeightChangeAmount", "MaxWeightChangeAmount"), // dendriteWeightChangeAmount
 			getFloatFromConfigRange(m_axonConfig, "MinMinLength", "MaxMinLength"), // axonMinLength
 			getFloatFromConfigRange(m_axonConfig, "MinMaxLength", "MaxMaxLength"), // axonMaxLength
 			static_cast<unsigned int>(getIntFromConfigRange(m_axonConfig, "MinMinCount", "MaxMinCount")), //axonMinCount
 			static_cast<unsigned int>(getIntFromConfigRange(m_axonConfig, "MinMaxCount", "MaxMaxCount")), //axonMaxCount
+			getFloatFromConfigRange(m_axonConfig, "MinLowMoveAway", "MaxLowMoveAway"), // axonLowMoveAway
+			getFloatFromConfigRange(m_axonConfig, "MinHighMoveToward", "MaxHighMoveToward"), // axonHighMoveToward
+			getFloatFromConfigRange(m_axonConfig, "MinMoveAmount", "MaxMoveAmount"), // axonAwayTowardMoveAmount
 			getConfigAsMutableBool(m_neuronConfig, "FireProbabilistic"),  // neuronProbabilisticFire
 			getFloatFromConfigRange(m_neuronConfig, "MinFireThreshold", "MaxFireThreshold"),  // neuronFireThreshold
             getFloatFromConfigRange(m_neuronConfig, "MinMinFireValue", "MaxMinFireValue"), // neuronMinFireValue
@@ -657,12 +668,21 @@ namespace JBrain
 			{ "MinLength", "DendriteMinLength" },
 			{ "MaxLength", "DendriteMaxLength" },
 			{ "MinWeight", "DendriteMinWeight" },
-			{ "MaxWeight", "DendriteMaxWeight" }
+			{ "MaxWeight", "DendriteMaxWeight" },
+			{ "LowMoveAway", "DendriteLowMoveAway" },
+			{ "HighMoveToward", "DendriteHighMoveToward" },
+			{ "MoveAmount", "DendriteAwayTowardMoveAmount" },
+			{ "LowWeightDecrease", "DendriteLowWeightDecrease" },
+			{ "HighWeightIncrease", "DendriteHighWeightIncrease" },
+			{ "WeightChangeAmount", "DendriteWeightChangeAmount" }
 		};
 
 		static std::vector<std::vector<std::string> > floatMutations_axon{
 			{ "MinLength", "AxonMinLength" },
-			{ "MaxLength", "AxonMaxLength" }			
+			{ "MaxLength", "AxonMaxLength" },
+			{ "LowMoveAway", "AxonLowMoveAway" },
+			{ "HighMoveToward", "AxonHighMoveToward" },
+			{ "MoveAmount", "AxonAwayTowardMoveAmount" }
 		};
 
 		static std::vector<std::vector<std::string> > floatMutations_neuron{
