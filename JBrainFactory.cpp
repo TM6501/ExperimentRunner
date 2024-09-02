@@ -919,6 +919,7 @@ namespace JBrain
 		// brain and a new test of its parameters.
 		for (auto& brain : retVal)
 		{
+			brain->handleBrainSizeChange();
 			brain->m_name = getNextBrainName();
 			brain->addRandomStartingNeurons(true);
 		}

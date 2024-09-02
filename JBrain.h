@@ -380,6 +380,10 @@ namespace JBrain
 		bool initializeCSVOutputFile(std::string dataDirectory);
 		void writeLineToCSVOutputFile(const float& score);
 		void closeCSVOutputFile();
+
+		// If the size of the brain changed, some things may no longer make
+		// sense. This function handles the logical inconsistencies:
+		void handleBrainSizeChange();
 		
 		// Create 1 or more neurons with random valid parameters and add
 		// them to our  vector of neurons.
@@ -419,7 +423,7 @@ namespace JBrain
 			const float& axonMaxLength,
 		    const unsigned int& axonMinCount,
 			const unsigned int& axonMaxCount,
-			const bool& neuronProbabilisticFire,			
+			const bool& neuronProbabilisticFire,
 		    const float& neuronFireThreshold,
 			const float& neuronMinFireValue,
 			const float& neuronMaxFireValue,

@@ -380,6 +380,56 @@ namespace JBrain
 		return m_currNeuronNumber++;
 	}
 
+	void JBrain::handleBrainSizeChange()
+	{
+		// If one size changed, but we're enforcing cube-shaped brains, make the change:
+		if (m_brainUseSameDimensions)
+		{
+			if ((m_brainXSize != m_brainYSize) || (m_brainYSize != m_brainZSize))
+			{
+				float newBrainSize = std::max(m_brainXSize, std::max(m_brainYSize, m_brainZSize));
+				m_brainXSize = m_brainYSize = m_brainZSize = newBrainSize;
+			}
+		}
+
+		// Constrain the location of all parts of the brain:
+		for (auto& neuron : m_neurons)
+		{
+			neuron.constrainLocation(0.0, 0.0, 0.0, m_brainXSize, m_brainYSize, m_brainZSize);
+			for (auto& axon : neuron.m_axons)
+			{
+				axon.constrainLocation(0.0, 0.0, 0.0, m_brainXSize, m_brainYSize, m_brainZSize);
+				axon.constrainLength(neuron.m_X, neuron.m_Y, neuron.m_Z, m_axonMaxLength);
+			}
+
+			for (auto& dendrite : neuron.m_dendrites)
+			{
+				dendrite.constrainLocation(0.0, 0.0, 0.0, m_brainXSize, m_brainYSize, m_brainZSize);
+				dendrite.constrainLength(neuron.m_X, neuron.m_Y, neuron.m_Z, m_dendriteMaxLength);
+			}
+		}
+
+		// Constrain the location of our inputs and outputs:
+		for (auto& axon : m_inputAxons)
+			axon.constrainLocation(0.0, 0.0, 0.0, m_brainXSize, m_brainYSize, m_brainZSize);
+
+		for (auto& dendrite : m_outputDendrites)
+			dendrite.constrainLocation(0.0, 0.0, 0.0, m_brainXSize, m_brainYSize, m_brainZSize);
+
+		// Finally, if our inputs or outputs are expected to be on the edge of the
+		// brain, make sure they still are:
+		if (m_brainInputsOnOneSide)
+		{
+			// This shouldn't change since 0.0 is the minimum brain location,
+			// just being safe:
+			for (auto& axon : m_inputAxons)
+				axon.m_X = 0.0;
+
+			for (auto& dendrite : m_outputDendrites)
+				dendrite.m_X = m_brainXSize;
+		}
+	}
+
 	float JBrain::getRandomFloat(const float& min, const float& max)
 	{
 		// Random device and distribution don't need to be
