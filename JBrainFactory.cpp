@@ -564,6 +564,7 @@ namespace JBrain
 			getFloatFromConfigRange(m_neuronConfig, "MinNeuronSpaceDeteriorationParameter", "MaxNeuronSpaceDeteriorationParameter"), // neuronFireSpaceDeterioration
 			getFloatFromConfigRange(m_neuronConfig, "MinNeuronTimeDeteriorationParameter", "MaxNeuronTimeDeteriorationParameter"), // neuronFireTimeDeterioration
 			static_cast<unsigned int>(getIntFromConfigRange(m_neuronConfig, "MinNeuronFireLifetime", "MaxNeuronFireLifetime")), //neuronFireLifetime
+		    getConfigAsMutableBool(m_brainConfig, "InputsAge"), // inputNeuronFiresAge
 			getConfigAsMutableBool(m_sleepConfig, "UsePreTrainSleep"),  //usePreTrainSleep
 			getConfigAsMutableBool(m_sleepConfig, "UsePostTrainSleep"),  //usePostTrainSleep
 			brainXSize, brainYSize, brainZSize, brainUseSameDimensions,  // brain dimensions
@@ -773,7 +774,8 @@ namespace JBrain
 			{ "OutputsOnOneSide", "BrainOutputsOnOneSide" },
 			{ "InputsOnOneSide", "BrainInputsOnOneSide" },
 			{ "UseSameValueForAllDimensions", "BrainUseSameDimensions" },
-			{ "ResetBeforeProcessingInput", "ResetBeforeProcessingInput" }
+			{ "ResetBeforeProcessingInput", "ResetBeforeProcessingInput" },
+			{ "InputsAge", "InputNeuronFiresAge" }
 		};
 
 		static paramList boolMutations_equation{

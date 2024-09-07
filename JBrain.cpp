@@ -63,6 +63,7 @@ namespace JBrain
 		const float& neuronFireSpaceDeterioration,
 		const float& neuronFireTimeDeterioration,
 		const unsigned int& neuronFireLifetime,
+		const bool& inputNeuronFiresAge,
 		const bool& usePreTrainSleep,
 		const bool& usePostTrainSleep,
 		const float& brainXSize,
@@ -151,6 +152,7 @@ namespace JBrain
 		m_neuronFireSpaceDeterioration(neuronFireSpaceDeterioration),
 		m_neuronFireTimeDeterioration(neuronFireTimeDeterioration),
 		m_neuronFireLifetime(neuronFireLifetime),
+		m_inputNeuronFiresAge(inputNeuronFiresAge),
 		m_currNeuronNumber(0),
 		m_usePreTrainSleep(usePreTrainSleep),
 		m_usePostTrainSleep(usePostTrainSleep),
@@ -271,8 +273,9 @@ namespace JBrain
 			other.m_neuronDuplicationHealthChange, other.m_neuronDuplicationHealthReset,
 			other.m_jNeuronActivationFunction, other.m_neuronFireSpaceDeterioration,
 			other.m_neuronFireTimeDeterioration, other.m_neuronFireLifetime,
-			other.m_usePreTrainSleep, other.m_usePostTrainSleep, other.m_brainXSize,
-			other.m_brainYSize, other.m_brainZSize, other.m_brainUseSameDimensions,
+			other.m_inputNeuronFiresAge, other.m_usePreTrainSleep,
+			other.m_usePostTrainSleep, other.m_brainXSize, other.m_brainYSize,
+			other.m_brainZSize, other.m_brainUseSameDimensions,
 			other.m_brainResetBeforeProcessingInput,
 			other.m_brainProcessingStepsBetweenInputAndOutput,
 			other.m_brainInputsOnOneSide, other.m_brainOutputsOnOneSide,
@@ -587,10 +590,11 @@ namespace JBrain
 				static_cast<float>(inputs[i]), // fireValue
 				true);  // environmentInput
 
-			// Environment Inputs don't age, so we need to manually
+			// Environment Inputs may not age, so we need to manually
 			// set the age to 0 to make the time-deterioration equations
 			// avoid error:
-			tempNF.m_age = 0;
+			if (!m_inputNeuronFiresAge)
+				tempNF.m_age = 0;
 
 			// Add it to our list of neuron firings:
 			m_neuronFires.push_back(tempNF);
@@ -1050,9 +1054,8 @@ namespace JBrain
 		std::vector<unsigned int> tooOldIdx;		
 		for (unsigned int i = 0; i < m_neuronFires.size(); ++i)
 		{
-			// Inputs from the environment don't get their ages
-			// incremented:
-			if (!m_neuronFires[i].m_environmentInput)
+			// Inputs from the environment may not get their ages incremented:
+			if (m_inputNeuronFiresAge || !m_neuronFires[i].m_environmentInput)
 			{
 				++m_neuronFires[i].m_age;
 				if (m_neuronFires[i].m_age > static_cast<int>(m_neuronFireLifetime))
@@ -1836,6 +1839,7 @@ namespace JBrain
 			(fabs(m_neuronFireSpaceDeterioration - rhs.m_neuronFireSpaceDeterioration) < FLT_EPSILON) &&
 			(fabs(m_neuronFireTimeDeterioration - rhs.m_neuronFireTimeDeterioration) < FLT_EPSILON) &&
 			(m_neuronFireLifetime == rhs.m_neuronFireLifetime) &&
+			(m_inputNeuronFiresAge == rhs.m_inputNeuronFiresAge) &&
 			(m_currNeuronNumber == rhs.m_currNeuronNumber) &&
 			(m_usePreTrainSleep == rhs.m_usePreTrainSleep) &&
 			(m_usePostTrainSleep == rhs.m_usePostTrainSleep) &&
@@ -2060,6 +2064,7 @@ namespace JBrain
 		j["neuronFireSpaceDeterioration"] = m_neuronFireSpaceDeterioration;
 		j["neuronFireTimeDeterioration"] = m_neuronFireTimeDeterioration;
 		j["neuronFireLifetime"] = m_neuronFireLifetime;
+		j["inputNeuronFiresAge"] = m_inputNeuronFiresAge;
 		j["currNeuronNumber"] = m_currNeuronNumber;
 		j["usePreTrainSleep"] = m_usePreTrainSleep;
 		j["usePostTrainSleep"] = m_usePostTrainSleep;
@@ -2300,7 +2305,8 @@ namespace JBrain
 			CGP::StringToActivationFunction(j["jNeuronActivationFunction"].get<std::string>()),
 			j["neuronFireSpaceDeterioration"].get<float>(),
 			j["neuronFireTimeDeterioration"].get<float>(),
-			j["neuronFireLifetime"].get<unsigned int>(),			
+			j["neuronFireLifetime"].get<unsigned int>(),
+			j["inputNeuronFiresAge"].get<bool>(),
 			j["usePreTrainSleep"].get<bool>(),
 			j["usePostTrainSleep"].get<bool>(),
 			j["brainXSize"].get<float>(),
@@ -2804,6 +2810,11 @@ sagePercent,dendMinWeight,dendMaxWeight,dendAvgWeight,neurMinFire,neurMaxFire,ne
 				m_neuronDuplicationHealthReset = !m_neuronDuplicationHealthReset;
 			else
 				m_neuronDuplicationHealthReset = value;
+		else if (name == "InputNeuronFiresAge")
+			if (flipBool)
+				m_inputNeuronFiresAge = !m_inputNeuronFiresAge;
+			else
+				m_inputNeuronFiresAge = value;
 		else if (name == "UsePreTrainSleep")
 			if (flipBool)
 				m_usePreTrainSleep = !m_usePreTrainSleep;
@@ -2865,6 +2876,7 @@ sagePercent,dendMinWeight,dendMaxWeight,dendAvgWeight,neurMinFire,neurMaxFire,ne
 		out << "\tNeuron Probabilistic Fire: " << m_neuronProbabilisticFire << std::endl;
 		out << "\tNeuron Fire Threshold: " << m_neuronFireThreshold << std::endl;
 		out << "\tNeuron Fire Value Range: " << m_neuronMinFireValue << " - " << m_neuronMaxFireValue << std::endl;
+		out << "\tInput neuron fires age: " << m_inputNeuronFiresAge << std::endl;
 		out << "\tNeuron Refractory Period: " << m_neuronRefractoryPeriod << std::endl;
 		out << "\tNeuron Duplicate Nearby: " << m_neuronDuplicateNearby << std::endl;
 		out << "\tNeuron duplication health reset: " << m_neuronDuplicationHealthReset << std::endl;

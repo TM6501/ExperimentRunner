@@ -65,7 +65,7 @@ namespace JBrain
 		// outputs are disembodied dendrites.
 		std::vector<JDendrite> m_outputDendrites;
 		std::vector<JAxon> m_inputAxons;
-		
+
 		// Dendrites:
 		float m_dendriteMinLength;
 		float m_dendriteMaxLength;
@@ -128,6 +128,7 @@ namespace JBrain
 		float m_neuronFireSpaceDeterioration;
 		float m_neuronFireTimeDeterioration;
 		unsigned int m_neuronFireLifetime;
+		bool m_inputNeuronFiresAge;
 
 		// To keep track of all of the neurons created, even if they've been
 		// destroyed:
@@ -474,6 +475,7 @@ namespace JBrain
 			const float& neuronFireSpaceDeterioration,
 			const float& neuronFireTimeDeterioration,
 			const unsigned int& neuronFireLifetime,
+			const bool& inputNeuronFiresAge,
 			const bool& usePreTrainSleep,
 			const bool& usePostTrainSleep,
 			const float& brainXSize,
