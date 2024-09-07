@@ -607,6 +607,12 @@ namespace JBrain
 			m_initialObservation = inputs;
 			m_totalTrialInputsProcessed = 0;
 			m_totalTrialSageChoiceMatches = 0;
+
+			for (JNeuron& neuron : m_neurons)
+			{
+				neuron.m_fireOpportunitiesInThisRun = 0;
+				neuron.m_timesFiredInThisRun = 0;
+			}
 		}
 
 		// Check to see if we should reset, and do it if so:
@@ -1019,7 +1025,7 @@ namespace JBrain
 	float JBrain::applyJNeuronActivationFunction(const float& input)
 	{
 		float retVal = input;
-		static float e = 2.718281828459045235360284171352;
+		static float e = 2.718281828459045235360284171352f;
 
 		// Ignore the "none" case:
 		switch (m_jNeuronActivationFunction)
@@ -1080,6 +1086,7 @@ namespace JBrain
 		{
 			// This was an opportunity to fire, mark it as such:
 			++neuron.m_fireOpportunitiesSinceLastUpdate;
+			++neuron.m_fireOpportunitiesInThisRun;
 
 			float totalDendriteInputs = 0.0;
 			for (unsigned int i = 0; i < neuron.m_dendrites.size(); ++i)
@@ -1097,6 +1104,7 @@ namespace JBrain
 				{
 					neuron.m_timeStepsSinceLastFire = 0;
 					++neuron.m_timesFiredSinceLastUpdate;
+					++neuron.m_timesFiredInThisRun;
 					retFire = true;
 				}
 			}
@@ -2431,7 +2439,8 @@ namespace JBrain
 		}
 
 		// Write the first line (column headers) to the csv:
-		*m_outputCSV << "neuronCount,avgNeuronHealth,dendriteCount,axonCount,score,sagePercent";
+		*m_outputCSV << "neuronCount,avgNeuronHealth,dendriteCount,axonCount,score,\
+sagePercent,dendMinWeight,dendMaxWeight,dendAvgWeight,neurMinFire,neurMaxFire,neurAvgFire";
 
 		// Include the scenario's initial conditions:
 		for (unsigned int i = 0; i < m_observationSize; ++i)
@@ -2464,6 +2473,19 @@ namespace JBrain
 
 		*m_outputCSV << "," << sageMatchPercent;
 
+		// Get the statistics on dendrite weights and neuron fire percentages:
+		float minWeight = 0.0;
+		float maxWeight = 0.0;
+		float avgWeight = 0.0;
+		float minFire = 0.0;
+		float maxFire = 0.0;
+		float avgFire = 0.0;
+		getDendriteWeightStats(minWeight, maxWeight, avgWeight);
+		getNeuronFirePercentages(minFire, maxFire, avgFire);
+
+		*m_outputCSV << "," << minWeight << "," << maxWeight << "," << avgWeight;
+		*m_outputCSV << "," << minFire << "," << maxFire << "," << avgFire;
+
 		// Output the initial observation:
 		for (auto& obs : m_initialObservation)
 			*m_outputCSV << "," << obs;
@@ -2480,6 +2502,64 @@ namespace JBrain
 			delete m_outputCSV;
 			m_outputCSV = nullptr;
 		}
+	}
+
+	void JBrain::getDendriteWeightStats(float& minWeight, float& maxWeight, float& avgWeight)
+	{
+		float totalWeight = 0.0;
+		unsigned int dendriteCount = 0;
+
+		// We don't want an error here if the brain killed all of its neurons:
+		if (m_neurons.size() == 0)
+		{
+			minWeight = maxWeight = avgWeight = 0.0;
+			return;
+		}
+
+		// Making reasonably safe assumption of a minimum dendrite count > 0:
+		minWeight = maxWeight = m_neurons[0].m_dendrites[0].m_weight;
+
+		for (JNeuron& neuron : m_neurons)
+		{
+			for (JDendrite& dend : neuron.m_dendrites)
+			{
+				// Gather our stats:
+				totalWeight += dend.m_weight;
+				++dendriteCount;				
+				minWeight = fmin(minWeight, dend.m_weight);
+				maxWeight = fmax(maxWeight, dend.m_weight);
+			}
+		}
+
+		// Finish calculations:
+		avgWeight = totalWeight / static_cast<float>(dendriteCount);
+	}
+
+	void JBrain::getNeuronFirePercentages(float& minFire, float& maxFire, float& avgFire)
+	{
+		minFire = maxFire = avgFire = 0.0;
+
+		if (m_neurons.size() == 0)
+			return;
+
+		float tempFire;
+		float totalFire = 0.0;
+
+		// For every neuron, calculate the average number of times it fired during
+		// this run when it was possible to do so, and keep running stats:
+		for (JNeuron& neuron : m_neurons)
+		{
+			tempFire = 0.0;
+			if (neuron.m_fireOpportunitiesInThisRun > 0)
+				tempFire = static_cast<float>(neuron.m_timesFiredInThisRun) /
+				static_cast<float>(neuron.m_fireOpportunitiesInThisRun);
+
+			minFire = fmin(tempFire, minFire);
+			maxFire = fmax(tempFire, maxFire);
+			totalFire += tempFire;
+		}
+
+		avgFire = totalFire / static_cast<float>(m_neurons.size());
 	}
 
 	unsigned int JBrain::getDendriteCount()

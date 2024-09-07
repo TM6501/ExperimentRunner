@@ -290,7 +290,14 @@ namespace JBrain
 		// Calculate how often this brain's output matched the sage's output.
 		// Return a value between 0.0 and 1.0:
 		void calculateSageMatch();
-		
+
+		// Calculate statistics about dendrite weights and neuron
+		// fire percentages:
+		void getDendriteWeightStats(float& minWeight, float& maxWeight, float& avgWeight);
+
+		// Calculate statistics about neuron fire percentages:
+		void getNeuronFirePercentages(float& minFire, float& maxFire, float& avgFire);
+
 		// Create the input axon and output dendrites that the brain uses
 		// to send and receive from the outside world.
 		void createInputsAndOutputs();
