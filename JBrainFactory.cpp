@@ -216,7 +216,8 @@ namespace JBrain
 
 		static std::vector<std::string> allOutputs{"LOCATION", "HEALTH", "WEIGHT",
 		"STRONGEST_INPUT_CLOSER_FURTHER", "NEAREST_AXON_CLOSER_FURTHER",
-		"CLOSER_TO_STRONGEST_INPUT", "CLOSER_TO_NEAREST_AXON"};
+		"RANDOM_MOVEMENT_THRESHOLD", "CLOSER_TO_STRONGEST_INPUT",
+		"CLOSER_TO_NEAREST_AXON"};
 		
 		m_dendriteInputs.clear();
 		m_dendriteOutputs.clear();
@@ -237,6 +238,19 @@ namespace JBrain
 			if (tmpStr == "true")
 				m_dendriteOutputs.push_back(CGP::StringToCGPOutput(*iter));
 		}
+
+		// Check for likely errors:
+		if (std::find(m_dendriteInputs.begin(), m_dendriteInputs.end(),
+			CGP::CGP_INPUT::UNDEFINED) != m_dendriteInputs.end())
+		{
+			std::cout << "Undefined found in dendrite inputs. Likely error." << std::endl;
+		}
+
+		if (std::find(m_dendriteOutputs.begin(), m_dendriteOutputs.end(),
+			CGP::CGP_OUTPUT::UNDEFINED) != m_dendriteOutputs.end())
+		{
+			std::cout << "Undefined found in dendrite outputs. Likely error." << std::endl;
+		}
 	}
 
 	void JBrainFactory::buildAxonCGPLists()
@@ -248,7 +262,8 @@ namespace JBrain
 		  "NEURON_AGE", "NEURON_HEALTH", "CURRENT_LENGTH"};
 
 		static std::vector<std::string> allOutputs{ "LOCATION",
-			"NEAREST_DENDRITE_CLOSER_FURTHER", "HEALTH" };
+			"NEAREST_DENDRITE_CLOSER_FURTHER", "RANDOM_MOVEMENT_THRESHOLD",
+			"HEALTH" };
 
 		m_axonInputs.clear();
 		m_axonOutputs.clear();
@@ -268,6 +283,19 @@ namespace JBrain
 			tmpStr = getConfigAsString(m_equationsConfig["AxonProgramOutputs"], *iter);
 			if (tmpStr == "true")
 				m_axonOutputs.push_back(CGP::StringToCGPOutput(*iter));
+		}
+
+		// Check for likely errors:
+		if (std::find(m_axonInputs.begin(), m_axonInputs.end(),
+			CGP::CGP_INPUT::UNDEFINED) != m_axonInputs.end())
+		{
+			std::cout << "Undefined found in axon inputs. Likely error." << std::endl;
+		}
+
+		if (std::find(m_axonOutputs.begin(), m_axonOutputs.end(),
+			CGP::CGP_OUTPUT::UNDEFINED) != m_axonOutputs.end())
+		{
+			std::cout << "Undefined found in axon outputs. Likely error." << std::endl;
 		}
 	}
 

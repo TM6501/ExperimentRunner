@@ -1263,6 +1263,17 @@ namespace JBrain
 				++cgpIdx;
 				break;
 
+			case CGP::CGP_OUTPUT::RANDOM_MOVEMENT_THRESHOLD:
+				// Random movement uses the highMoveToward threshold:
+				if (cgpOutputs[cgpIdx] > m_axonHighMoveToward)
+				{
+					axon.m_X += getRandomFloat(-m_axonAwayTowardMoveAmount, m_axonAwayTowardMoveAmount);
+					axon.m_Y += getRandomFloat(-m_axonAwayTowardMoveAmount, m_axonAwayTowardMoveAmount);
+					axon.m_Z += getRandomFloat(-m_axonAwayTowardMoveAmount, m_axonAwayTowardMoveAmount);
+				}
+				++cgpIdx;
+				break;
+
 			case CGP::CGP_OUTPUT::HEALTH:
 				std::cout << "Axon health in CGP output params. Not yet implemented." << std::endl;
 				++cgpIdx;
@@ -1335,6 +1346,17 @@ namespace JBrain
 				dendrite.m_X += (dendrite.m_nearestAxonX - dendrite.m_X) * moveVal;
 				dendrite.m_Y += (dendrite.m_nearestAxonY - dendrite.m_Y) * moveVal;
 				dendrite.m_Z += (dendrite.m_nearestAxonZ - dendrite.m_Z) * moveVal;
+				++cgpIdx;
+				break;
+
+			case CGP::CGP_OUTPUT::RANDOM_MOVEMENT_THRESHOLD:
+				// Random movement uses the highMoveToward threshold:
+				if (cgpOutputs[cgpIdx] > m_axonHighMoveToward)
+				{
+					dendrite.m_X += getRandomFloat(-m_dendriteAwayTowardMoveAmount, m_dendriteAwayTowardMoveAmount);
+					dendrite.m_Y += getRandomFloat(-m_dendriteAwayTowardMoveAmount, m_dendriteAwayTowardMoveAmount);
+					dendrite.m_Z += getRandomFloat(-m_dendriteAwayTowardMoveAmount, m_dendriteAwayTowardMoveAmount);
+				}
 				++cgpIdx;
 				break;
 
