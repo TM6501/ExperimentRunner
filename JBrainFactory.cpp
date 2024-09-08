@@ -544,6 +544,9 @@ namespace JBrain
 			getFloatFromConfigRange(m_neuronConfig, "MinFireThreshold", "MaxFireThreshold"),  // neuronFireThreshold
             getFloatFromConfigRange(m_neuronConfig, "MinMinFireValue", "MaxMinFireValue"), // neuronMinFireValue
 			getFloatFromConfigRange(m_neuronConfig, "MinMaxFireValue", "MaxMaxFireValue"), // neuronMaxFireValue
+			getConfigAsMutableBool(m_neuronConfig, "UseDynamicFireThresholds"), // neuronUseDynamicFireThresholds
+			getFloatFromConfigRange(m_neuronConfig, "MinFireThresholdIdleChange", "MaxFireThresholdIdleChange"), // neuronDynamicFireThresholdIdleChange
+			getFloatFromConfigRange(m_neuronConfig, "MinFireThresholdActiveChange", "MaxFireThresholdActiveChange"), // neuronDynamicFireThresholdActiveChange
 			static_cast<unsigned int>(getIntFromConfigRange(m_neuronConfig, "MinRefractoryPeriod", "MaxRefractoryPeriod")), //neuronRefractoryPeriod
 			getConfigAsMutableBool(m_neuronConfig, "NeuronDuplicatesNearby"),  // neuronDuplicateNearby
 			getFloatFromConfigRange(m_neuronConfig, "MinMinNearbyDistance", "MaxMinNearbyDistance"), //neuronMinNearbyDistance
@@ -729,6 +732,8 @@ namespace JBrain
 			{ "MaxFireValue", "NeuronMaxFireValue" },
 			{ "NeuronSpaceDeteriorationParameter", "NeuronFireSpaceDeterioration" },
 			{ "NeuronTimeDeteriorationParameter", "NeuronFireTimeDeterioration" },
+			{ "FireThresholdIdleChange", "NeuronFireThresholdIdleChange" },
+			{ "FireThresholdActiveChange", "NeuronFireThresholdActiveChange" }
 		};
 
 		static std::vector<std::vector<std::string> > floatMutations_brain{
@@ -762,7 +767,8 @@ namespace JBrain
 
 		static paramList boolMutations_neuron{
 			{ "FireProbabilistic", "NeuronProbabilisticFire" },
-			{ "NeuronDuplicatesNearby", "NeuronDuplicatesNearby" }
+			{ "NeuronDuplicatesNearby", "NeuronDuplicatesNearby" },
+			{ "UseDynamicFireThresholds", "NeuronUseDynamicFireThresholds" }
 		};
 
 		static paramList boolMutations_sleep{

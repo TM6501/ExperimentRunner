@@ -96,6 +96,9 @@ namespace JBrain
 		float m_neuronFireThreshold;  // Ignored if probabilistic fire is used.
 		float m_neuronMinFireValue;  // The min and max values that a neuron will
 		float m_neuronMaxFireValue;  // generate when firing.
+		bool m_neuronUseDynamicFireThresholds;
+		float m_neuronFireThresholdIdleChange;  // How much the fire threshold of
+		float m_neuronFireThresholdActiveChange;  // a neuron changes when idle or firing
 		unsigned int m_neuronRefractoryPeriod;
 		bool m_neuronDuplicateNearby;
 		float m_neuronMinNearbyDistance;  // Ignored if not duplicating nearby.
@@ -455,6 +458,9 @@ namespace JBrain
 		    const float& neuronFireThreshold,
 			const float& neuronMinFireValue,
 			const float& neuronMaxFireValue,
+			const bool& neuronUseDynamicFireThresholds,
+			const float& neuronFireThresholdIdleChange,
+			const float& neuronFireThresholdActiveChange,
 		    const unsigned int& neuronRefractoryPeriod,
 		    const bool& neuronDuplicateNearby,
 		    const float& neuronMinNearbyDistance,

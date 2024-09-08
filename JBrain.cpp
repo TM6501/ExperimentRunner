@@ -43,6 +43,9 @@ namespace JBrain
 		const float& neuronFireThreshold,
 		const float& neuronMinFireValue,
 		const float& neuronMaxFireValue,
+		const bool& neuronUseDynamicFireThresholds,
+		const float& neuronFireThresholdIdleChange,
+		const float& neuronFireThresholdActiveChange,
 		const unsigned int& neuronRefractoryPeriod,
 		const bool& neuronDuplicateNearby,
 		const float& neuronMinNearbyDistance,
@@ -130,6 +133,9 @@ namespace JBrain
 		m_neuronFireThreshold(neuronFireThreshold),
 		m_neuronMinFireValue(neuronMinFireValue),
 		m_neuronMaxFireValue(neuronMaxFireValue),
+		m_neuronUseDynamicFireThresholds(neuronUseDynamicFireThresholds),
+		m_neuronFireThresholdIdleChange(neuronFireThresholdIdleChange),
+		m_neuronFireThresholdActiveChange(neuronFireThresholdActiveChange),
 		m_neuronRefractoryPeriod(neuronRefractoryPeriod),
 		m_neuronDuplicateNearby(neuronDuplicateNearby),
 		m_neuronMinNearbyDistance(neuronMinNearbyDistance),
@@ -260,10 +266,11 @@ namespace JBrain
 			other.m_axonHighMoveToward, other.m_axonAwayTowardMoveAmount,
 			other.m_neuronProbabilisticFire,
 			other.m_neuronFireThreshold, other.m_neuronMinFireValue,
-			other.m_neuronMaxFireValue, other.m_neuronRefractoryPeriod,
-			other.m_neuronDuplicateNearby, other.m_neuronMinNearbyDistance,
-			other.m_neuronMaxNearbyDistance, other.m_minStartingNeurons,
-			other.m_maxStartingNeurons, other.m_maxNeurons,
+			other.m_neuronMaxFireValue, other.m_neuronUseDynamicFireThresholds,
+			other.m_neuronFireThresholdIdleChange, other.m_neuronFireThresholdActiveChange,
+			other.m_neuronRefractoryPeriod, other.m_neuronDuplicateNearby,
+			other.m_neuronMinNearbyDistance, other.m_neuronMaxNearbyDistance,
+			other.m_minStartingNeurons, other.m_maxStartingNeurons, other.m_maxNeurons,
 			other.m_neuronStartingHealth,
 			other.m_neuronCGPOutputLowHealthChange,
 			other.m_neuronCGPOutputHighHealthChange,
@@ -458,6 +465,15 @@ namespace JBrain
 
 	float JBrain::getRandomFloat(const float& min, const float& max)
 	{
+		// Make sure we don't hit bad argument issues:
+		float useMin = min;
+		float useMax = max;
+		if (min >= max)
+		{
+			useMin = max;
+			useMax = min;
+		}
+
 		// Random device and distribution don't need to be
 		// recreated every time:
 		static std::random_device rd;
@@ -467,8 +483,8 @@ namespace JBrain
 		// syntax around max is used to make sure that max is one
 		// of the values that can be returned. The distribution's possible
 		// return values are in the range [a, b):
-		std::uniform_real_distribution<> dist(min,
-			std::nextafter(max, std::numeric_limits<float>::max()));
+		std::uniform_real_distribution<> dist(useMin,
+			std::nextafter(useMax, std::numeric_limits<float>::max()));
 
 		return static_cast<float>(dist(e2));
 	}
@@ -519,6 +535,10 @@ namespace JBrain
 		{
 			if (getIfNeuronFires(m_neurons[i]))
 			{
+				// Fired? Change its fire threshold:
+				if (m_neuronUseDynamicFireThresholds)
+					m_neurons[i].m_fireThreshold += m_neuronFireThresholdActiveChange;
+
 				// Add a neuron neuron-fired event at every axon output:
 				for (unsigned int j = 0; j < m_neurons[i].m_axons.size(); ++j)
 				{
@@ -535,6 +555,10 @@ namespace JBrain
 				// before doing any checks on the next time step.
 				m_neurons[i].m_timeStepsSinceLastFire = -1;
 			}
+
+			// Didn't fire? Change its fire threshold:
+			if (m_neuronUseDynamicFireThresholds)
+				m_neurons[i].m_fireThreshold += m_neuronFireThresholdIdleChange;
 		}
 	}
 
@@ -1084,8 +1108,10 @@ namespace JBrain
 	{
 		bool retFire = false;
 
-		// Only check if outside of refractory period:
-		if (neuron.m_timeStepsSinceLastFire >= static_cast<int>(m_neuronRefractoryPeriod))
+		// If we aren't using dynamic firing thresholds, the neuron needs to be
+		// out of its refractory period:
+		if (m_neuronUseDynamicFireThresholds ||
+			neuron.m_timeStepsSinceLastFire >= static_cast<int>(m_neuronRefractoryPeriod))
 		{
 			// This was an opportunity to fire, mark it as such:
 			++neuron.m_fireOpportunitiesSinceLastUpdate;
@@ -1101,9 +1127,9 @@ namespace JBrain
 
 			// Neuron firing is either probabilistic or based on a threshold value
 			// being exceeded:
-			if (m_neuronFireThreshold)
+			if (!m_neuronProbabilisticFire)
 			{
-				if (totalDendriteInputs > m_neuronFireThreshold)
+				if (totalDendriteInputs > neuron.m_fireThreshold)
 				{
 					neuron.m_timeStepsSinceLastFire = 0;
 					++neuron.m_timesFiredSinceLastUpdate;
@@ -1113,8 +1139,8 @@ namespace JBrain
 			}
 			else // Probabilistic fire:
 			{
-				float randFire = getRandomFloat(0.0, 1.0);
-				if (randFire <= totalDendriteInputs)
+				float randFire = getRandomFloat(0.0, totalDendriteInputs);
+				if (randFire <= neuron.m_fireThreshold)
 				{
 					++neuron.m_timesFiredSinceLastUpdate;
 					neuron.m_timeStepsSinceLastFire = 0;
@@ -1717,7 +1743,7 @@ namespace JBrain
 		JNeuron neuron(
 			x, y, z,
 			getRandomFloat(m_neuronMinFireValue, m_neuronMaxFireValue),
-			m_neuronStartingHealth,
+			m_neuronFireThreshold, m_neuronStartingHealth,
 			getNextNeuronNumber());
 
 		// Determine how many axon and dendrites to add:
@@ -1820,6 +1846,9 @@ namespace JBrain
 			(fabs(m_neuronFireThreshold - rhs.m_neuronFireThreshold) < FLT_EPSILON) &&
 			(fabs(m_neuronMinFireValue - rhs.m_neuronMinFireValue) < FLT_EPSILON) &&
 			(fabs(m_neuronMaxFireValue - rhs.m_neuronMaxFireValue) < FLT_EPSILON) &&
+			(m_neuronUseDynamicFireThresholds == rhs.m_neuronUseDynamicFireThresholds) &&
+			(fabs(m_neuronFireThresholdIdleChange - rhs.m_neuronFireThresholdIdleChange) < FLT_EPSILON) &&
+			(fabs(m_neuronFireThresholdActiveChange - rhs.m_neuronFireThresholdActiveChange) < FLT_EPSILON) &&
 			(m_neuronRefractoryPeriod == rhs.m_neuronRefractoryPeriod) &&
 			(m_neuronDuplicateNearby == rhs.m_neuronDuplicateNearby) &&
 			(fabs(m_neuronMinNearbyDistance - rhs.m_neuronMinNearbyDistance) < FLT_EPSILON) &&
@@ -2042,6 +2071,9 @@ namespace JBrain
 		j["neuronFireThreshold"] = m_neuronFireThreshold;
 		j["neuronMinFireValue"] = m_neuronMinFireValue;
 		j["neuronMaxFireValue"] = m_neuronMaxFireValue;
+		j["neuronUseDynamicFireThresholds"] = m_neuronUseDynamicFireThresholds;
+		j["neuronFireThresholdIdleChange"] = m_neuronFireThresholdIdleChange;
+		j["neuronFireThresholdActiveChange"] = m_neuronFireThresholdActiveChange;
 		j["neuronRefractoryPeriod"] = m_neuronRefractoryPeriod;
 		j["neuronDuplicateNearby"] = m_neuronDuplicateNearby;
 		j["neuronMinNearbyDistance"] = m_neuronMinNearbyDistance;
@@ -2127,6 +2159,7 @@ namespace JBrain
 			j["neurons"][n]["Y"] = m_neurons[n].m_Y;
 			j["neurons"][n]["Z"] = m_neurons[n].m_Z;
 			j["neurons"][n]["fireValue"] = m_neurons[n].m_fireValue;
+			j["neurons"][n]["fireThreshold"] = m_neurons[n].m_fireThreshold;
 			j["neurons"][n]["health"] = m_neurons[n].m_health;
 			j["neurons"][n]["fireOpportunitiesSinceLastUpdate"] = 
 				m_neurons[n].m_fireOpportunitiesSinceLastUpdate;
@@ -2286,6 +2319,9 @@ namespace JBrain
 			j["neuronFireThreshold"].get<float>(),
 			j["neuronMinFireValue"].get<float>(),
 			j["neuronMaxFireValue"].get<float>(),
+			j["neuronUseDynamicFireThresholds"].get<bool>(),
+			j["neuronFireThresholdIdleChange"].get<float>(),
+			j["neuronFireThresholdActiveChange"].get<float>(),
 			j["neuronRefractoryPeriod"].get<unsigned int>(),
 			j["neuronDuplicateNearby"].get<bool>(),
 			j["neuronMinNearbyDistance"].get<float>(),
@@ -2387,6 +2423,7 @@ namespace JBrain
 			JNeuron tmpNeuron(elem["X"].get<float>(),
 				elem["Y"].get<float>(), elem["Z"].get<float>(),
 				elem["fireValue"].get<float>(),
+				elem["fireThreshold"].get<float>(),
 				elem["health"].get<float>(),
 				elem["neuronNumber"].get<unsigned int>());
 			
@@ -2695,6 +2732,10 @@ sagePercent,dendMinWeight,dendMaxWeight,dendAvgWeight,neurMinFire,neurMaxFire,ne
 			m_neuronMinFireValue = value;
 		else if (name == "NeuronMaxFireValue")
 			m_neuronMaxFireValue = value;
+		else if (name == "NeuronFireThresholdIdleChange")
+			m_neuronFireThresholdIdleChange = value;
+		else if (name == "NeuronFireThresholdActiveChange")
+			m_neuronFireThresholdActiveChange = value;
 		else if (name == "NeuronFireSpaceDeterioration")
 			m_neuronFireSpaceDeterioration = value;
 		else if (name == "NeuronFireTimeDeterioration")
@@ -2800,6 +2841,11 @@ sagePercent,dendMinWeight,dendMaxWeight,dendAvgWeight,neurMinFire,neurMaxFire,ne
 				m_neuronProbabilisticFire = !m_neuronProbabilisticFire;
 			else
 				m_neuronProbabilisticFire = value;
+		else if (name == "NeuronUseDynamicFireThresholds")
+			if (flipBool)
+				m_neuronUseDynamicFireThresholds = !m_neuronUseDynamicFireThresholds;
+			else
+				m_neuronUseDynamicFireThresholds = value;
 		else if (name == "NeuronDuplicatesNearby")
 			if (flipBool)
 				m_neuronDuplicateNearby = !m_neuronDuplicateNearby;
@@ -2875,6 +2921,8 @@ sagePercent,dendMinWeight,dendMaxWeight,dendAvgWeight,neurMinFire,neurMaxFire,ne
 		out << "\tAxon Count: " << m_axonMinCount << " - " << m_axonMaxCount << std::endl;
 		out << "\tNeuron Probabilistic Fire: " << m_neuronProbabilisticFire << std::endl;
 		out << "\tNeuron Fire Threshold: " << m_neuronFireThreshold << std::endl;
+		out << "\tDynamic neuron fire threshold: " << m_neuronUseDynamicFireThresholds << std::endl;
+		out << "\tDynamic neuron fire changes: " << m_neuronFireThresholdIdleChange << ", " << m_neuronFireThresholdActiveChange << std::endl;
 		out << "\tNeuron Fire Value Range: " << m_neuronMinFireValue << " - " << m_neuronMaxFireValue << std::endl;
 		out << "\tInput neuron fires age: " << m_inputNeuronFiresAge << std::endl;
 		out << "\tNeuron Refractory Period: " << m_neuronRefractoryPeriod << std::endl;
@@ -3019,6 +3067,7 @@ sagePercent,dendMinWeight,dendMaxWeight,dendAvgWeight,neurMinFire,neurMaxFire,ne
 			(lhs.m_axons == rhs.m_axons) &&
 			(lhs.m_dendrites == rhs.m_dendrites) &&
 			(fabs(lhs.m_fireValue - rhs.m_fireValue) < FLT_EPSILON) &&
+			(fabs(lhs.m_fireThreshold - rhs.m_fireThreshold) < FLT_EPSILON) &&
 			(fabs(lhs.m_health - rhs.m_health) < FLT_EPSILON) &&
 			(lhs.m_neuronNumber == rhs.m_neuronNumber) &&
 			(lhs.m_age == rhs.m_age);
