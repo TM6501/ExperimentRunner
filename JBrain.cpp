@@ -555,10 +555,11 @@ namespace JBrain
 				// before doing any checks on the next time step.
 				m_neurons[i].m_timeStepsSinceLastFire = -1;
 			}
-
-			// Didn't fire? Change its fire threshold:
-			if (m_neuronUseDynamicFireThresholds)
-				m_neurons[i].m_fireThreshold += m_neuronFireThresholdIdleChange;
+			else // Didn't fire? Change its fire threshold:
+			{
+				if (m_neuronUseDynamicFireThresholds)
+					m_neurons[i].m_fireThreshold += m_neuronFireThresholdIdleChange;
+			}
 		}
 	}
 
@@ -1126,27 +1127,21 @@ namespace JBrain
 			totalDendriteInputs = applyJNeuronActivationFunction(totalDendriteInputs);
 
 			// Neuron firing is either probabilistic or based on a threshold value
-			// being exceeded:
-			if (!m_neuronProbabilisticFire)
-			{
-				if (totalDendriteInputs > neuron.m_fireThreshold)
-				{
-					neuron.m_timeStepsSinceLastFire = 0;
-					++neuron.m_timesFiredSinceLastUpdate;
-					++neuron.m_timesFiredInThisRun;
-					retFire = true;
-				}
-			}
-			else // Probabilistic fire:
-			{
-				float randFire = getRandomFloat(0.0, totalDendriteInputs);
-				if (randFire <= neuron.m_fireThreshold)
-				{
-					++neuron.m_timesFiredSinceLastUpdate;
-					neuron.m_timeStepsSinceLastFire = 0;
-					retFire = true;
-				}
-			}
+			// being exceeded. Probabilistic still uses the dendrite inputs, but
+			// as part of a random variable selection:
+			if (m_neuronProbabilisticFire &&
+				getRandomFloat(0.0, totalDendriteInputs) >= neuron.m_fireThreshold)
+				retFire = true;								
+			else if (totalDendriteInputs >= neuron.m_fireThreshold)
+				retFire = true;
+		}
+
+		// If we fired, update some variables as such:
+		if (retFire)
+		{
+			neuron.m_timeStepsSinceLastFire = 0;
+			++neuron.m_timesFiredSinceLastUpdate;
+			++neuron.m_timesFiredInThisRun;
 		}
 
 		return retFire;
@@ -2581,12 +2576,23 @@ sagePercent,dendMinWeight,dendMaxWeight,dendAvgWeight,neurMinFire,neurMaxFire,ne
 	void JBrain::getNeuronFirePercentages(float& minFire, float& maxFire, float& avgFire)
 	{
 		minFire = maxFire = avgFire = 0.0;
+		float tempFire = 0.0;
+		float totalFire = 0.0;
 
+		// No neurons? Return:
 		if (m_neurons.size() == 0)
 			return;
-
-		float tempFire;
-		float totalFire = 0.0;
+		else  // Fill in the first neuron's values as the starts:
+		{
+			auto neuron = m_neurons[0];
+		
+			// Should never get false from this check:
+			if (neuron.m_fireOpportunitiesInThisRun > 0)
+				tempFire = static_cast<float>(neuron.m_timesFiredInThisRun) /
+				static_cast<float>(neuron.m_fireOpportunitiesInThisRun);			
+			
+			minFire = maxFire = tempFire;
+		}		
 
 		// For every neuron, calculate the average number of times it fired during
 		// this run when it was possible to do so, and keep running stats:
