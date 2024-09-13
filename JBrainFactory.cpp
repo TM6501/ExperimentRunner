@@ -521,7 +521,6 @@ namespace JBrain
 			"JBrainFactory", // Parent's name.
 			static_cast<unsigned int>(getConfigAsInt(m_brainConfig, "InputCount")), // observationSize
 			static_cast<unsigned int>(getConfigAsInt(m_brainConfig, "OutputCount")),  // actionSize
-			getFloatFromConfigRange(m_dendriteConfig, "MinMinLength", "MaxMinLength"), //dendriteMinLength
 			getFloatFromConfigRange(m_dendriteConfig, "MinMaxLength", "MaxMaxLength"), //dendriteMaxLength
 			static_cast<unsigned int>(getIntFromConfigRange(m_dendriteConfig, "MinMinCount", "MaxMinCount")), // dendriteMinCount
 			static_cast<unsigned int>(getIntFromConfigRange(m_dendriteConfig, "MinMaxCount", "MaxMaxCount")), // dendriteMaxCount
@@ -533,7 +532,6 @@ namespace JBrain
 			getFloatFromConfigRange(m_dendriteConfig, "MinLowWeightDecrease", "MaxLowWeightDecrease"), // dendriteLowWeightDecrease
 			getFloatFromConfigRange(m_dendriteConfig, "MinHighWeightIncrease", "MaxHighWeightIncrease"), // dendriteHighWeightIncrease
 			getFloatFromConfigRange(m_dendriteConfig, "MinWeightChangeAmount", "MaxWeightChangeAmount"), // dendriteWeightChangeAmount
-			getFloatFromConfigRange(m_axonConfig, "MinMinLength", "MaxMinLength"), // axonMinLength
 			getFloatFromConfigRange(m_axonConfig, "MinMaxLength", "MaxMaxLength"), // axonMaxLength
 			static_cast<unsigned int>(getIntFromConfigRange(m_axonConfig, "MinMinCount", "MaxMinCount")), //axonMinCount
 			static_cast<unsigned int>(getIntFromConfigRange(m_axonConfig, "MinMaxCount", "MaxMaxCount")), //axonMaxCount
@@ -697,7 +695,6 @@ namespace JBrain
 		// This was being done as tuples of Yaml nodes and 2 strings, but it didn't
 		// want to behave.  This is less elegant solution:
 		static paramList floatMutations_dendrite{
-			{ "MinLength", "DendriteMinLength" },
 			{ "MaxLength", "DendriteMaxLength" },
 			{ "MinWeight", "DendriteMinWeight" },
 			{ "MaxWeight", "DendriteMaxWeight" },
@@ -710,7 +707,6 @@ namespace JBrain
 		};
 
 		static std::vector<std::vector<std::string> > floatMutations_axon{
-			{ "MinLength", "AxonMinLength" },
 			{ "MaxLength", "AxonMaxLength" },
 			{ "LowMoveAway", "AxonLowMoveAway" },
 			{ "HighMoveToward", "AxonHighMoveToward" },

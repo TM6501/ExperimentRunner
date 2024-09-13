@@ -67,7 +67,6 @@ namespace JBrain
 		std::vector<JAxon> m_inputAxons;
 
 		// Dendrites:
-		float m_dendriteMinLength;
 		float m_dendriteMaxLength;
 		unsigned int m_dendriteMinCount;
 		unsigned int m_dendriteMaxCount;
@@ -83,7 +82,6 @@ namespace JBrain
 		float m_dendriteWeightChangeAmount;
 
 		// Axons:
-		float m_axonMinLength;
 		float m_axonMaxLength;
 		unsigned int m_axonMinCount;
 		unsigned int m_axonMaxCount;
@@ -435,7 +433,6 @@ namespace JBrain
 			const std::string& parentName,
 			const unsigned int& observationSize,
 			const unsigned int& actionSize,
-			const float& dendriteMinLength,
 			const float& dendriteMaxLength,
 			const unsigned int& dendriteMinCount,
 			const unsigned int& dendriteMaxCount,
@@ -447,7 +444,6 @@ namespace JBrain
 			const float& dendriteLowWeightDecrease,
 			const float& dendriteHighWeightIncrease,
 			const float& dendriteWeightChangeAmount,
-			const float& axonMinLength,
 			const float& axonMaxLength,
 		    const unsigned int& axonMinCount,
 			const unsigned int& axonMaxCount,

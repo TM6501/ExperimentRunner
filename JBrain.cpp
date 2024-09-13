@@ -20,7 +20,6 @@ namespace JBrain
 		const std::string& parentName,
 		const unsigned int& observationSize,
 		const unsigned int& actionSize,
-		const float& dendriteMinLength,
 		const float& dendriteMaxLength,
 		const unsigned int& dendriteMinCount,
 		const unsigned int& dendriteMaxCount,
@@ -32,7 +31,6 @@ namespace JBrain
 		const float& dendriteLowWeightDecrease,
 		const float& dendriteHighWeightIncrease,
 		const float& dendriteWeightChangeAmount,
-		const float& axonMinLength,
 		const float& axonMaxLength,
 		const unsigned int& axonMinCount,
 		const unsigned int& axonMaxCount,
@@ -110,7 +108,6 @@ namespace JBrain
 		m_parentName(parentName),
 		m_observationSize(observationSize),
 		m_actionSize(actionSize),
-		m_dendriteMinLength(dendriteMinLength),
 		m_dendriteMaxLength(dendriteMaxLength),
 		m_dendriteMinCount(dendriteMinCount),
 		m_dendriteMaxCount(dendriteMaxCount),
@@ -122,7 +119,6 @@ namespace JBrain
 		m_dendriteLowWeightDecrease(dendriteLowWeightDecrease),
 		m_dendriteHighWeightIncrease(dendriteHighWeightIncrease),
 		m_dendriteWeightChangeAmount(dendriteWeightChangeAmount),
-		m_axonMinLength(axonMinLength),
 		m_axonMaxLength(axonMaxLength),
 		m_axonMinCount(axonMinCount),
 		m_axonMaxCount(axonMaxCount),
@@ -255,13 +251,13 @@ namespace JBrain
 
 	JBrain::JBrain(const JBrain& other)
 		: JBrain(other.m_name, other.m_parentName, other.m_observationSize,
-			other.m_actionSize, other.m_dendriteMinLength, other.m_dendriteMaxLength,
+			other.m_actionSize, other.m_dendriteMaxLength,
 			other.m_dendriteMinCount, other.m_dendriteMaxCount,
 			other.m_dendriteMinWeight, other.m_dendriteMaxWeight,
 			other.m_dendriteLowMoveAway, other.m_dendriteHighMoveToward,
 			other.m_dendriteAwayTowardMoveAmount, other.m_dendriteLowWeightDecrease,
 			other.m_dendriteHighWeightIncrease, other.m_dendriteWeightChangeAmount,
-			other.m_axonMinLength, other.m_axonMaxLength, other.m_axonMinCount,
+			other.m_axonMaxLength, other.m_axonMinCount,
 			other.m_axonMaxCount, other.m_axonLowMoveAway,
 			other.m_axonHighMoveToward, other.m_axonAwayTowardMoveAmount,
 			other.m_neuronProbabilisticFire,
@@ -1818,7 +1814,6 @@ namespace JBrain
 			(m_actionSize == rhs.m_actionSize) &&
 			(m_outputDendrites == rhs.m_outputDendrites) &&
 			(m_inputAxons == rhs.m_inputAxons) &&
-			(fabs(m_dendriteMinLength - rhs.m_dendriteMinLength) < FLT_EPSILON) &&
 			(fabs(m_dendriteMaxLength - rhs.m_dendriteMaxLength) < FLT_EPSILON) &&
 			(m_dendriteMinCount == rhs.m_dendriteMinCount) &&
 			(m_dendriteMaxCount == rhs.m_dendriteMaxCount) &&
@@ -1830,7 +1825,6 @@ namespace JBrain
 			(fabs(m_dendriteLowWeightDecrease - rhs.m_dendriteLowWeightDecrease) < FLT_EPSILON) &&
 			(fabs(m_dendriteHighWeightIncrease - rhs.m_dendriteHighWeightIncrease) < FLT_EPSILON) &&
 			(fabs(m_dendriteWeightChangeAmount - rhs.m_dendriteWeightChangeAmount) < FLT_EPSILON) &&
-			(fabs(m_axonMinLength - rhs.m_axonMinLength) < FLT_EPSILON) &&
 			(fabs(m_axonMaxLength - rhs.m_axonMaxLength) < FLT_EPSILON) &&
 			(m_axonMinCount == rhs.m_axonMinCount) &&
 			(m_axonMaxCount == rhs.m_axonMaxCount) &&
@@ -1927,11 +1921,9 @@ namespace JBrain
 
 		// All values should be written directly out in a single brain section:
 		m_name = fullConfig["name"].as<std::string>();
-		m_dendriteMinLength = fullConfig["dendriteMinLength"].as<float>();
 		m_dendriteMaxLength = fullConfig["dendriteMaxLength"].as<float>();
 		m_dendriteMinCount = fullConfig["dendriteMinCount"].as<unsigned int>();
 		m_dendriteMaxCount = fullConfig["dendriteMaxCount"].as<unsigned int>();
-		m_axonMinLength = fullConfig["axonMinLength"].as<float>();
 		m_axonMaxLength = fullConfig["axonMaxLength"].as<float>();
 		m_axonMinCount = fullConfig["axonMinCount"].as<unsigned int>();
 		m_axonMaxCount = fullConfig["axonMaxCount"].as<unsigned int>();
@@ -2043,7 +2035,6 @@ namespace JBrain
 		j["parentName"] = m_parentName;
 		j["observationSize"] = m_observationSize;
 		j["actionSize"] = m_actionSize;
-		j["dendriteMinLength"] = m_dendriteMinLength;
 		j["dendriteMaxLength"] = m_dendriteMaxLength;
 		j["dendriteMinCount"] = m_dendriteMinCount;
 		j["dendriteMaxCount"] = m_dendriteMaxCount;
@@ -2055,7 +2046,6 @@ namespace JBrain
 		j["dendriteLowWeightDecrease"] = m_dendriteLowWeightDecrease;
 		j["dendriteHighWeightIncrease"] = m_dendriteHighWeightIncrease;
 		j["dendriteWeightChangeAmount"] = m_dendriteWeightChangeAmount;
-		j["axonMinLength"] = m_axonMinLength;
 		j["axonMaxLength"] = m_axonMaxLength;
 		j["axonMinCount"] = m_axonMinCount;
 		j["axonMaxCount"] = m_axonMaxCount;
@@ -2291,7 +2281,6 @@ namespace JBrain
 			j["parentName"].get<std::string>(),
 			j["observationSize"].get<unsigned int>(),
 			j["actionSize"].get<unsigned int>(),
-			j["dendriteMinLength"].get<float>(),
 			j["dendriteMaxLength"].get<float>(),
 			j["dendriteMinCount"].get<unsigned int>(),
 			j["dendriteMaxCount"].get<unsigned int>(),
@@ -2303,7 +2292,6 @@ namespace JBrain
 			j["dendriteLowWeightDecrease"].get<float>(),
 			j["dendriteHighWeightIncrease"].get<float>(),
 			j["dendriteWeightChangeAmount"].get<float>(),
-			j["axonMinLength"].get<float>(),
 			j["axonMaxLength"].get<float>(),
 			j["axonMinCount"].get<unsigned int>(),
 			j["axonMaxCount"].get<unsigned int>(),
@@ -2682,9 +2670,7 @@ sagePercent,dendMinWeight,dendMaxWeight,dendAvgWeight,neurMinFire,neurMaxFire,ne
 		bool retVal = true;  // Set to false if we don't find the name
 
 		// Long list of possible names and their values:
-		if (name == "DendriteMinLength")
-			m_dendriteMinLength = value;
-		else if (name == "DendriteMaxLength")
+		if (name == "DendriteMaxLength")
 			m_dendriteMaxLength = value;
 		else if (name == "DendriteMinWeight")
 			m_dendriteMinWeight = value;
@@ -2702,8 +2688,6 @@ sagePercent,dendMinWeight,dendMaxWeight,dendAvgWeight,neurMinFire,neurMaxFire,ne
 			m_dendriteHighWeightIncrease = value;
 		else if (name == "DendriteWeightChangeAmount")
 			m_dendriteWeightChangeAmount = value;
-		else if (name == "AxonMinLength")
-			m_axonMinLength = value;
 		else if (name == "AxonMaxLength")
 			m_axonMaxLength = value;
 		else if (name == "AxonLowMoveAway")
@@ -2921,9 +2905,9 @@ sagePercent,dendMinWeight,dendMaxWeight,dendAvgWeight,neurMinFire,neurMaxFire,ne
 	{
 		out << "----- Begin Brain: " << m_name << " -----" << std::endl;
 		out << "\t Parent's name: " << m_parentName << std::endl;
-		out << "\tDendrite Length: " << m_dendriteMinLength << " - " << m_dendriteMaxLength << std::endl;
+		out << "\tDendrite Max Length: " << m_dendriteMaxLength << std::endl;
 		out << "\tDendrite Count: " << m_dendriteMinCount << " - " << m_dendriteMaxCount << std::endl;
-		out << "\tAxon Length: " << m_axonMinLength << " - " << m_axonMaxLength << std::endl;
+		out << "\tAxon Max Length: " << m_axonMaxLength << std::endl;
 		out << "\tAxon Count: " << m_axonMinCount << " - " << m_axonMaxCount << std::endl;
 		out << "\tNeuron Probabilistic Fire: " << m_neuronProbabilisticFire << std::endl;
 		out << "\tNeuron Fire Threshold: " << m_neuronFireThreshold << std::endl;
