@@ -948,13 +948,6 @@ namespace JBrain
 			retVal.push_back(temp);
 		}
 
-		if (parent->m_CGPMonolithicUpdater != nullptr)
-		{
-			JBrain* temp = new JBrain(*parent);
-			temp->m_CGPMonolithicUpdater->mutateSelf(CGP::MUTATION_STRATEGY::ACTIVE_GENE);
-			retVal.push_back(temp);
-		}
-
 		// Set all of the child brain's parent-names to the parent:
 		for (auto& brain : retVal)
 			brain->m_parentName = parent->m_name;
