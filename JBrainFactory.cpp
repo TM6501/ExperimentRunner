@@ -587,7 +587,6 @@ namespace JBrain
 			getFloatFromConfigRange(m_circuitsConfig, "MinNeuronHealthChangeFromDeath", "MaxNeuronHealthChangeFromDeath"), // circuitNeuronHealthChangeFromNeuronDeath
 			getFloatFromConfigRange(m_circuitsConfig, "MinNeuronHealthChangeFromDuplication", "MaxNeuronHealthChangeFromDuplication"), // circuitNeuronHealthChangeFromNeuronDuplication
 			getConfigAsMutableBool(m_circuitsConfig, "CircuitsCanOverlap"), // circuitsCanOverlap
-			getConfigAsMutableBool(m_equationsConfig, "UseMonolithicCGP"), // equationsUseMonolithic
 			getFloatFromConfigRange(m_equationsConfig, "MinMinP", "MaxMinP"), // MinP
 			getFloatFromConfigRange(m_equationsConfig, "MinMaxP", "MaxMaxP"), // MaxP
 			getFloatFromConfigRange(m_equationsConfig, "MinLowConstraint", "MaxLowConstraint"), // minConstraint
@@ -780,9 +779,7 @@ namespace JBrain
 			{ "InputsAge", "InputNeuronFiresAge" }
 		};
 
-		static paramList boolMutations_equation{
-			{ "UseMonolithicCGP", "EquationUseMonolithic" }
-		};
+		static paramList boolMutations_equation{};  // None so far.
 		
 		// The full next generation:
 		std::vector<JBrain*> retVal;

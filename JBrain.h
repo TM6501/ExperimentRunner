@@ -172,13 +172,6 @@ namespace JBrain
 		float m_circuitNeuronHealthChangeFromNeuronDuplication;
 		bool m_circuitsCanOverlap;
 
-		// Equations that dictate changes in the individual neuron variables.
-		// Each brain will maintain a monolithic update function as well as several
-		// smaller functions each responsible for a different aspect of the update.
-		// Mutation may change the brain from monolithic to separated functions, effectively
-		// re-activating dormant DNA. This is important for biological realism.
-		bool m_equationUseMonolithic;
-
 		// P is a static variable value input into each function. It is chosen
 		// randomly (and mutated) at the individual CGP-node level. These
 		// values represent the minimum and maximum values P can take on
@@ -239,9 +232,6 @@ namespace JBrain
 		void createNeuronUpdater();
 		void createChemicalUpdater();
 		void createAllSeparateUpdaters(); // Call the 4 other creation functions.
-
-		// Monolithic Updater (Not used for now):
-		CGP::JBrainCGPIndividual* m_CGPMonolithicUpdater;
 
 		// Update frequency:
 		CGP::UPDATE_EVENT m_updateEvent;
@@ -499,7 +489,6 @@ namespace JBrain
 			const float& circuitNeuronHealthChangeFromNeuronDeath,
 		    const float& circuitNeuronHealthChangeFromNeuronDuplication,
 		    const bool& circuitsCanOverlap,
-			const bool& equationUseMonolithic,
 			const float& minP, const float& maxP,
 			const float& minConstraint, const float& maxConstraint,
 			const unsigned int& maxNeuronAge,

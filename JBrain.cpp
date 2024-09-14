@@ -86,7 +86,6 @@ namespace JBrain
 		const float& circuitNeuronHealthChangeFromNeuronDeath,
 		const float& circuitNeuronHealthChangeFromNeuronDuplication,
 		const bool& circuitsCanOverlap,
-		const bool& equationUseMonolithic,
 		const float& minP, const float& maxP,
 		const float& minConstraint, const float& maxConstraint,
 		const unsigned int& maxNeuronAge,
@@ -177,7 +176,6 @@ namespace JBrain
 		m_circuitNeuronHealthChangeFromNeuronDeath(circuitNeuronHealthChangeFromNeuronDeath),
 		m_circuitNeuronHealthChangeFromNeuronDuplication(circuitNeuronHealthChangeFromNeuronDuplication),
 		m_circuitsCanOverlap(circuitsCanOverlap),
-		m_equationUseMonolithic(equationUseMonolithic),
 		m_minP(minP), m_maxP(maxP),
 		m_minConstraint(minConstraint), m_maxConstraint(maxConstraint),
 		m_maxNeuronAge(maxNeuronAge),
@@ -196,7 +194,6 @@ namespace JBrain
 		m_CGPAxonUpdater(nullptr),
 		m_CGPNeuronUpdater(nullptr),
 		m_CGPChemicalUpdater(nullptr),
-		m_CGPMonolithicUpdater(nullptr),
 		m_updateEvent(updateEvent),
 		m_updateFrequency(updateFrequency),
 		m_functionStringList(functionStringList),
@@ -223,12 +220,6 @@ namespace JBrain
 
 				m_brainXSize = m_brainYSize = m_brainZSize = newBrainSize;
 			}			
-		}
-
-		if (m_equationUseMonolithic)
-		{
-			std::cout << "Monolithic CGP not yet supported. Switching to separate updaters." << std::endl;
-			m_equationUseMonolithic = false;
 		}
 
 		// To ensure that all brains created with the same inputs and outputs
@@ -290,8 +281,8 @@ namespace JBrain
 			other.m_circuitProbabilityNeuronDuplicateInCircuit,
 			other.m_circuitNeuronHealthChangeFromNeuronDeath,
 			other.m_circuitNeuronHealthChangeFromNeuronDuplication,
-			other.m_circuitsCanOverlap, other.m_equationUseMonolithic, other.m_minP,
-			other.m_maxP, other.m_minConstraint, other.m_maxConstraint,
+			other.m_circuitsCanOverlap, other.m_minP, other.m_maxP,
+			other.m_minConstraint, other.m_maxConstraint,
 			other.m_maxNeuronAge, other.m_dendriteInputs, other.m_dendriteOutputs,
 			other.m_dendriteProgramNodes, other.m_axonInputs, other.m_axonOutputs,
 			other.m_axonProgramNodes, other.m_neuronInputs, other.m_neuronOutputs,
@@ -312,9 +303,6 @@ namespace JBrain
 		if (other.m_CGPChemicalUpdater != nullptr)
 			m_CGPChemicalUpdater = new CGP::JBrainCGPIndividual(*other.m_CGPChemicalUpdater);
 
-		if (other.m_CGPMonolithicUpdater != nullptr)
-			m_CGPMonolithicUpdater = new CGP::JBrainCGPIndividual(*other.m_CGPMonolithicUpdater);
-
 		m_neurons = other.m_neurons;
 		m_currNeuronNumber = other.m_currNeuronNumber;
 		m_inputAxons = other.m_inputAxons;
@@ -334,9 +322,6 @@ namespace JBrain
 
 		if (m_CGPChemicalUpdater != nullptr)
 			delete m_CGPChemicalUpdater;
-
-		if (m_CGPMonolithicUpdater != nullptr)
-			delete m_CGPMonolithicUpdater;
 
 		closeCSVOutputFile();
 	}
@@ -1880,7 +1865,6 @@ namespace JBrain
 			(fabs(m_circuitNeuronHealthChangeFromNeuronDeath - rhs.m_circuitNeuronHealthChangeFromNeuronDeath) < FLT_EPSILON) &&
 			(fabs(m_circuitNeuronHealthChangeFromNeuronDuplication - rhs.m_circuitNeuronHealthChangeFromNeuronDuplication) < FLT_EPSILON) &&
 			(m_circuitsCanOverlap == rhs.m_circuitsCanOverlap) &&
-			(m_equationUseMonolithic == rhs.m_equationUseMonolithic) &&
 			(fabs(m_minP - rhs.m_minP) < FLT_EPSILON) &&
 			(fabs(m_maxP - rhs.m_maxP) < FLT_EPSILON) &&
 			(fabs(m_minConstraint - rhs.m_minConstraint) < FLT_EPSILON) &&
@@ -1905,7 +1889,6 @@ namespace JBrain
 			(m_dendriteProgramNodes == rhs.m_dendriteProgramNodes) &&
 			(m_axonProgramNodes == rhs.m_axonProgramNodes) &&
 			(m_neuronProgramNodes == rhs.m_neuronProgramNodes) &&
-			areEqual(m_CGPMonolithicUpdater, rhs.m_CGPMonolithicUpdater) &&
 			(m_updateEvent == rhs.m_updateEvent) &&
 			(m_updateFrequency == rhs.m_updateFrequency) &&
 			(m_functionStringList == rhs.m_functionStringList) &&
@@ -1955,14 +1938,12 @@ namespace JBrain
 		m_circuitNeuronHealthChangeFromNeuronDuplication = 
 			fullConfig["circuitHealthChangeFromNeuronDuplication"].as<float>();
 		m_circuitsCanOverlap = fullConfig["circuitsCanOverlap"].as<bool>();
-		m_equationUseMonolithic = fullConfig["equationUseMonolithic"].as<bool>();
 		
 		// Let the update functions read themselves in:
 		m_CGPDendriteUpdater = nullptr;
 		m_CGPAxonUpdater = nullptr;
 		m_CGPNeuronUpdater = nullptr;
 		m_CGPChemicalUpdater = nullptr;
-		m_CGPMonolithicUpdater = nullptr;
 
 		if (fullConfig["CGPDendriteUpdater"])
 		{
@@ -1983,11 +1964,6 @@ namespace JBrain
 		{
 			// m_CGPChemicalUpdater = new CGP::JBrainCGPIndividual(fullConfig["CGPChemicalUpdater"])
 		}
-
-		if (fullConfig["CGPMonolithicUpdater"])
-		{
-			// m_CGPMonolithicUpdater = new CGP::JBrainCGPIndividual(fullConfig["CGPMonolithicUpdater"])
-		}
 	}
 
 	void JBrain::writeSelfToJson(json& j)
@@ -1996,7 +1972,6 @@ namespace JBrain
 		json axonCGP;
 		json neuronCGP;
 		json chemCGP;
-		json monoCGP;
 
 		// Ask each updater to write itself to a json node:
 		if (m_CGPDendriteUpdater != nullptr)
@@ -2019,16 +1994,10 @@ namespace JBrain
 		else
 			chemCGP = "NULL";
 
-		if (m_CGPMonolithicUpdater != nullptr)
-			m_CGPMonolithicUpdater->writeSelfToJson(monoCGP);
-		else
-			monoCGP = "NULL";
-
 		j["CGPDendriteUpdater"] = dendCGP;
 		j["CGPAxonUpdater"] = axonCGP;
 		j["CGPNeuronUpdater"] = neuronCGP;
 		j["CGPChemicalUpdater"] = chemCGP;
-		j["CGPMonolithicUpdater"] = monoCGP;
 
 		// Need the rest of the brain variables
 		j["name"] = m_name;
@@ -2104,7 +2073,6 @@ namespace JBrain
 		j["circuitNeuronHealthChangeFromNeuronDeath"] = m_circuitNeuronHealthChangeFromNeuronDeath;
 		j["circuitNeuronHealthChangeFromNeuronDuplication"] = m_circuitNeuronHealthChangeFromNeuronDuplication;
 		j["circuitsCanOverlap"] = m_circuitsCanOverlap;
-		j["equationUseMonolithic"] = m_equationUseMonolithic;
 		j["minP"] = m_minP;
 		j["maxP"] = m_maxP;
 		j["minConstraint"] = m_minConstraint;
@@ -2218,7 +2186,6 @@ namespace JBrain
 		CGP::JBrainCGPIndividual* axonCGP = nullptr;
 		CGP::JBrainCGPIndividual* neuronCGP = nullptr;
 		CGP::JBrainCGPIndividual* chemCGP = nullptr;
-		CGP::JBrainCGPIndividual* monoCGP = nullptr;
 
 		if (!j["CGPDendriteUpdater"].is_string())
 			dendCGP = CGP::JBrainCGPIndividual::getCGPIndividualFromJson(j["CGPDendriteUpdater"]);
@@ -2231,9 +2198,6 @@ namespace JBrain
 
 		if (!j["CGPChemicalUpdater"].is_string())
 			chemCGP = CGP::JBrainCGPIndividual::getCGPIndividualFromJson(j["CGPChemicalUpdater"]);
-
-		if (!j["CGPMonolithicUpdater"].is_string())
-			monoCGP = CGP::JBrainCGPIndividual::getCGPIndividualFromJson(j["CGPMonolithicUpdater"]);
 
 		// Get the strings of inputs/functions:
 		std::vector<std::string> neuronInputsStrings = j["neuronInputs"];
@@ -2347,7 +2311,6 @@ namespace JBrain
 			j["circuitNeuronHealthChangeFromNeuronDeath"].get<float>(),
 			j["circuitNeuronHealthChangeFromNeuronDuplication"].get<float>(),
 			j["circuitsCanOverlap"].get<bool>(),
-			j["equationUseMonolithic"].get<bool>(),
 			j["minP"].get<float>(),
 			j["maxP"].get<float>(),
 			j["minConstraint"].get<float>(),
@@ -2376,7 +2339,6 @@ namespace JBrain
 		retVal->m_CGPAxonUpdater = axonCGP;
 		retVal->m_CGPNeuronUpdater = neuronCGP;
 		retVal->m_CGPChemicalUpdater = chemCGP;
-		retVal->m_CGPMonolithicUpdater = monoCGP;
 
 		// Read in each input axon:
 		retVal->m_inputAxons.clear();
@@ -2655,7 +2617,7 @@ sagePercent,dendMinWeight,dendMaxWeight,dendAvgWeight,neurMinFire,neurMaxFire,ne
 		*/		
 		else if (name == "UpdateProgramFrequency")
 			m_updateFrequency = value;		
-		
+
 		/* Not implementing mutations of available function in CGP for now.*/
 		// else if (name == "CGPUseFunc_AND")
 			// doStuff();
@@ -2752,8 +2714,6 @@ sagePercent,dendMinWeight,dendMaxWeight,dendAvgWeight,neurMinFire,neurMaxFire,ne
 				m_CGPChemicalUpdater->setMinConstraint(value);
 			if (m_CGPNeuronUpdater != nullptr)
 				m_CGPNeuronUpdater->setMinConstraint(value);
-			if (m_CGPMonolithicUpdater != nullptr)
-				m_CGPMonolithicUpdater->setMinConstraint(value);
 		}
 		else if (name == "CGPMaxConstraint")
 		{
@@ -2766,9 +2726,6 @@ sagePercent,dendMinWeight,dendMaxWeight,dendAvgWeight,neurMinFire,neurMaxFire,ne
 				m_CGPChemicalUpdater->setMaxConstraint(value);
 			if (m_CGPNeuronUpdater != nullptr)
 				m_CGPNeuronUpdater->setMaxConstraint(value);
-			if (m_CGPMonolithicUpdater != nullptr)
-				m_CGPMonolithicUpdater->setMaxConstraint(value);
-
 		}
 		else if (name == "CGPMinP")
 		{
@@ -2781,8 +2738,6 @@ sagePercent,dendMinWeight,dendMaxWeight,dendAvgWeight,neurMinFire,neurMaxFire,ne
 				m_CGPChemicalUpdater->setMinP(value);
 			if (m_CGPNeuronUpdater != nullptr)
 				m_CGPNeuronUpdater->setMinP(value);
-			if (m_CGPMonolithicUpdater != nullptr)
-				m_CGPMonolithicUpdater->setMinP(value);
 		}
 		else if (name == "CGPMaxP")
 		{
@@ -2795,8 +2750,6 @@ sagePercent,dendMinWeight,dendMaxWeight,dendAvgWeight,neurMinFire,neurMaxFire,ne
 				m_CGPChemicalUpdater->setMaxP(value);
 			if (m_CGPNeuronUpdater != nullptr)
 				m_CGPNeuronUpdater->setMaxP(value);
-			if (m_CGPMonolithicUpdater != nullptr)
-				m_CGPMonolithicUpdater->setMaxP(value);
 		}
 		/* Not implementing mutations of available function in CGP for now.*/
 		// else if (name == "CGPUseFunc_AND")
@@ -2885,12 +2838,7 @@ sagePercent,dendMinWeight,dendMaxWeight,dendAvgWeight,neurMinFire,neurMaxFire,ne
 		else if (name == "CircuitMinDimensions")
 			m_circuitMinDimensions = value;
 		...
-		*/
-		else if (name == "EquationUseMonolithic")
-			if (flipBool)
-				m_equationUseMonolithic = !m_equationUseMonolithic;
-			else
-				m_equationUseMonolithic = value;		
+		*/		
 		/* Not implementing mutations of available function in CGP for now.*/
 		// else if (name == "CGPUseFunc_AND")
 			// doStuff();
@@ -2934,12 +2882,10 @@ sagePercent,dendMinWeight,dendMaxWeight,dendAvgWeight,neurMinFire,neurMaxFire,ne
 		out << "\tNeuron health change from neuron in same circuit duplicating: " << m_circuitNeuronHealthChangeFromNeuronDuplication << std::endl;
 		out << "\tCircuits can overlap: " << m_circuitsCanOverlap << std::endl;
 		out << "\tUpdate programs will run after every " << m_updateFrequency << " occurences of " << CGP::UpdateEventToString(m_updateEvent) << std::endl;
-		out << "\tUse monolithich equation (single CGP for all updates): " << m_equationUseMonolithic << std::endl;
 		out << "\tDendrite updater CGP: " << m_CGPDendriteUpdater << std::endl;
 		out << "\tAxon Updater CGP: " << m_CGPAxonUpdater << std::endl;
 		out << "\tNeuron Updater CGP: " << m_CGPNeuronUpdater << std::endl;
 		out << "\tChemical Updater CGP: " << m_CGPChemicalUpdater << std::endl;
-		out << "\tMonolithic Updater CGP: " << m_CGPMonolithicUpdater << std::endl;
 		
 		// Assuming out == std::cout for all CGP Program updates:
 		if (m_CGPDendriteUpdater != nullptr)
