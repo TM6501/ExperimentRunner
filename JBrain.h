@@ -62,8 +62,9 @@ namespace JBrain
 		unsigned int m_actionSize;
 
 		// Inputs to the brain (from the environment) are disembodied axons. The
-		// outputs are disembodied dendrites.
+		// outputs are disembodied dendrites or neurons with no axons:
 		std::vector<JDendrite> m_outputDendrites;
+		std::vector<JNeuron> m_outputNeurons;
 		std::vector<JAxon> m_inputAxons;
 
 		// Dendrites:
@@ -104,6 +105,7 @@ namespace JBrain
 		unsigned int m_minStartingNeurons;
 		unsigned int m_maxStartingNeurons;
 		unsigned int m_maxNeurons;
+		bool m_useOutputNeurons;
 
 		// The health thresholds to trigger neuron death or duplication and the
 		// multiplier that changes them when either event occurs:
@@ -208,6 +210,8 @@ namespace JBrain
 		
 		// Singular Updaters:
 		CGP::JBrainCGPIndividual* m_CGPDendriteUpdater;
+		// The updater for dendrites attached to the output neurons:
+		CGP::JBrainCGPIndividual* m_CGPOutputDendriteUpdater;
 		CGP::JBrainCGPIndividual* m_CGPAxonUpdater;
 		CGP::JBrainCGPIndividual* m_CGPNeuronUpdater;
 		CGP::JBrainCGPIndividual* m_CGPChemicalUpdater;
@@ -216,6 +220,8 @@ namespace JBrain
 		// The inputs for each CGP program:
 		std::vector<CGP::CGP_INPUT> m_dendriteInputs;
 		std::vector<CGP::CGP_OUTPUT> m_dendriteOutputs;
+		std::vector<CGP::CGP_INPUT> m_outputDendriteInputs;
+		std::vector<CGP::CGP_OUTPUT> m_outputDendriteOutputs;
 		std::vector<CGP::CGP_INPUT> m_axonInputs;
 		std::vector<CGP::CGP_OUTPUT> m_axonOutputs;
 		std::vector<CGP::CGP_INPUT> m_neuronInputs;
@@ -223,11 +229,13 @@ namespace JBrain
 
 		// The number of CGP nodes to allocate to each program:
 		unsigned int m_dendriteProgramNodes;
+		unsigned int m_outputDendriteProgramNodes;
 		unsigned int m_axonProgramNodes;
 		unsigned int m_neuronProgramNodes;
 
 		// Use our class variables to create each of the singular updaters.
 		void createDendriteUpdater();
+		void createOutputDendriteUpdater();
 		void createAxonUpdater();
 		void createNeuronUpdater();
 		void createChemicalUpdater();
@@ -241,6 +249,7 @@ namespace JBrain
 		std::vector<std::string> m_functionStringList;
 		std::vector<std::function<double(double, double, double)> > m_functionList;
 
+		// All non-output neurons:
 		std::vector<JNeuron> m_neurons;
 
 		// Records of the choices this brain made and choices made by
@@ -248,6 +257,7 @@ namespace JBrain
 		// we make the "right" choice:
 		std::vector<int> m_sageChoices;
 		std::vector<int> m_brainChoices;
+		std::vector<double> m_mostRecentBrainOutput;
 		unsigned int m_inputProcessingsSinceLastUpdate;
 
 		// Data recorded for a full trial:
@@ -307,6 +317,7 @@ namespace JBrain
 
 		// Check if neuron fires:
 		bool getIfNeuronFires(JNeuron& neuron);
+		float calculateInternalNeuronValue(JNeuron& neuron);
 
 		// The steps taken by this single timestep:
 		// 1. Increment the age of all neuron fires and times since the neurons
@@ -352,11 +363,12 @@ namespace JBrain
 		std::vector<double> getCGPInputs(const JNeuron& neuron);
 		void applyCGPOutputs(JNeuron& neuron, const std::vector<double>& cgpOutputs);
 
-		// Dendrite version requires the parent neuron:
-		void applyCGP(JDendrite& dendrite, const JNeuron& parentNeuron);
-		std::vector<double> getCGPInputs(const JDendrite& dendrite, const JNeuron& parentNeuron);
+		// Dendrite version requires the parent neuron. They alse use the
+		// neuron number so that recent output values can be referenced:
+		void applyCGP(JDendrite& dendrite, const unsigned int& parentNeuronNum, const bool& outputNeuron);
+		std::vector<double> getCGPInputs(const JDendrite& dendrite, const unsigned int& parentNeuronNum, const bool& outputNeuron);
 		void applyCGPOutputs(JDendrite& dendrite, const std::vector<double>& cgpOutputs,
-			const JNeuron& parentNeuron);
+			const unsigned int& parentNeuronNum, const bool& outputNeuron);
 
 		void applyCGP(JAxon& axon, const JNeuron& parentNeuron);
 		std::vector<double> getCGPInputs(const JAxon& axon, const JNeuron& parentNeuron);
@@ -367,7 +379,11 @@ namespace JBrain
 		// crossed those thresholds.
 		void duplicateAndKillNeurons();
 		JNeuron createDuplicateNeuron(JNeuron& neuron);
-		JNeuron createNewNeuron(const float& x, const float& y, const float& z);
+		
+		// CreateNewNeuron:
+		// -1: Random dendrites/axon counts:
+		JNeuron createNewNeuron(const float& x, const float& y, const float& z,
+			const int& dendriteCount = -1, const int& axonCount = -1);
 
 		// Gather status values:
 		unsigned int getDendriteCount();
@@ -435,25 +451,26 @@ namespace JBrain
 			const float& dendriteHighWeightIncrease,
 			const float& dendriteWeightChangeAmount,
 			const float& axonMaxLength,
-		    const unsigned int& axonMinCount,
+			const unsigned int& axonMinCount,
 			const unsigned int& axonMaxCount,
 			const float& axonLowMoveAway,
 			const float& axonHighMoveToward,
 			const float& axonAwayTowardMoveAmount,
 			const bool& neuronProbabilisticFire,
-		    const float& neuronFireThreshold,
+			const float& neuronFireThreshold,
 			const float& neuronMinFireValue,
 			const float& neuronMaxFireValue,
 			const bool& neuronUseDynamicFireThresholds,
 			const float& neuronFireThresholdIdleChange,
 			const float& neuronFireThresholdActiveChange,
-		    const unsigned int& neuronRefractoryPeriod,
-		    const bool& neuronDuplicateNearby,
-		    const float& neuronMinNearbyDistance,
+			const unsigned int& neuronRefractoryPeriod,
+			const bool& neuronDuplicateNearby,
+			const float& neuronMinNearbyDistance,
 			const float& neuronMaxNearbyDistance,
 			const unsigned int& minStartingNeurons,
 			const unsigned int& maxStartingNeurons,
 			const unsigned int& maxNeurons,
+			const bool& useOutputNeurons,
 			const float& neuronStartingHealth,
 			const float& neuronCGPOutputLowHealthChange,
 			const float& neuronCGPOutputHighHealthChange,
@@ -495,6 +512,9 @@ namespace JBrain
 			const std::vector<CGP::CGP_INPUT>& dendriteInputs,
 			const std::vector<CGP::CGP_OUTPUT>& dendriteOutputs,
 			const unsigned int& dendriteProgramNodes,
+			const std::vector<CGP::CGP_INPUT>& outputDendriteInputs,
+			const std::vector<CGP::CGP_OUTPUT>& outputDendriteOutputs,
+			const unsigned int& outputDendriteProgramNodes,
 			const std::vector<CGP::CGP_INPUT>& axonInputs,
 			const std::vector<CGP::CGP_OUTPUT>& axonOutputs,
 			const unsigned int& axonProgramNodes,

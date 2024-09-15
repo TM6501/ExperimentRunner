@@ -212,7 +212,7 @@ namespace JBrain
 		  "STRONGEST_INPUT_IS_OBSERVATION_AXON", "STRONGEST_INPUT_VALUE",
 		  "NEAREST_AXON_XYZ", "NEAREST_AXON_DISTANCE", "NEAREST_AXON_IS_OBSERVATION_AXON",
 		  "INPUT_MAGNITUDE", "NEAREST_AXON_IS_PART_OF_SAME_NEURON", "CURRENT_LENGTH",
-		  "NEURON_AGE", "NEURON_HEALTH" };
+		  "NEURON_AGE", "NEURON_HEALTH", "EXPECTED_OUTPUT_DIFF"};
 
 		static std::vector<std::string> allOutputs{"LOCATION", "HEALTH", "WEIGHT",
 		"STRONGEST_INPUT_CLOSER_FURTHER", "NEAREST_AXON_CLOSER_FURTHER",
@@ -221,6 +221,8 @@ namespace JBrain
 		
 		m_dendriteInputs.clear();
 		m_dendriteOutputs.clear();
+		m_outputDendriteInputs.clear();
+		m_outputDendriteOutputs.clear();
 
 		// For each input, check to see if it is True:
 		std::string tmpStr;
@@ -239,6 +241,22 @@ namespace JBrain
 				m_dendriteOutputs.push_back(CGP::StringToCGPOutput(*iter));
 		}
 
+		// Repeat for the output dendrites:
+		for (auto iter = std::begin(allInputs); iter != std::end(allInputs); ++iter)
+		{
+			tmpStr = getConfigAsString(m_equationsConfig["OutputNeuronDendriteProgramInputs"], *iter);
+			if (tmpStr == "true")
+				m_outputDendriteInputs.push_back(CGP::StringToCGPInput(*iter));
+		}
+
+		// For each output, check to see if it is True:
+		for (auto iter = std::begin(allOutputs); iter != std::end(allOutputs); ++iter)
+		{
+			tmpStr = getConfigAsString(m_equationsConfig["OutputNeuronDendriteProgramOutputs"], *iter);
+			if (tmpStr == "true")
+				m_outputDendriteOutputs.push_back(CGP::StringToCGPOutput(*iter));
+		}
+
 		// Check for likely errors:
 		if (std::find(m_dendriteInputs.begin(), m_dendriteInputs.end(),
 			CGP::CGP_INPUT::UNDEFINED) != m_dendriteInputs.end())
@@ -250,6 +268,19 @@ namespace JBrain
 			CGP::CGP_OUTPUT::UNDEFINED) != m_dendriteOutputs.end())
 		{
 			std::cout << "Undefined found in dendrite outputs. Likely error." << std::endl;
+		}
+
+		// Repeat check with output neurons:
+		if (std::find(m_outputDendriteInputs.begin(), m_outputDendriteInputs.end(),
+			CGP::CGP_INPUT::UNDEFINED) != m_outputDendriteInputs.end())
+		{
+			std::cout << "Undefined found in output dendrite inputs. Likely error." << std::endl;
+		}
+
+		if (std::find(m_outputDendriteOutputs.begin(), m_outputDendriteOutputs.end(),
+			CGP::CGP_OUTPUT::UNDEFINED) != m_outputDendriteOutputs.end())
+		{
+			std::cout << "Undefined found in output dendrite outputs. Likely error." << std::endl;
 		}
 	}
 
@@ -552,6 +583,7 @@ namespace JBrain
 			static_cast<unsigned int>(getIntFromConfigRange(m_brainConfig, "MinMinStartingNeurons", "MaxMinStartingNeurons")), // minStartingNeurons
 			static_cast<unsigned int>(getIntFromConfigRange(m_brainConfig, "MinMaxStartingNeurons", "MaxMaxStartingNeurons")), // maxStartingNeurons
 			static_cast<unsigned int>(getConfigAsInt(m_brainConfig, "MaxNeuronCount")), // maxNeuronCount
+			getConfigAsMutableBool(m_brainConfig, "UseOutputNeurons"), // useOutputNeurons
 			getFloatFromConfigRange(m_neuronConfig, "MinNeuronStartingHealth", "MaxNeuronStartingHealth"),
 			getFloatFromConfigRange(m_neuronConfig, "MinLowHealthChange", "MaxLowHealthChange"),  // neuronCGPOutputLowHealthChange
 			getFloatFromConfigRange(m_neuronConfig, "MinHighHealthChange", "MaxHighHealthChange"),  // neuronCGPOutputHighHealthChange
@@ -594,6 +626,8 @@ namespace JBrain
 			static_cast<unsigned int>(getConfigAsInt(m_neuronConfig, "MaxNeuronAge")), //maxNeuronAge
 			m_dendriteInputs, m_dendriteOutputs,
 			static_cast<unsigned int>(getConfigAsInt(m_equationsConfig, "DendriteProgramCGPNodes")), // dendriteProgramNodes
+			m_outputDendriteInputs, m_outputDendriteOutputs,
+		    static_cast<unsigned int>(getConfigAsInt(m_equationsConfig, "OutputDendriteProgramCGPNodes")), // outputDendriteProgramNodes)
 			m_axonInputs, m_axonOutputs,
 			static_cast<unsigned int>(getConfigAsInt(m_equationsConfig, "AxonProgramCGPNodes")), // axonProgramNodes
 			m_neuronInputs, m_neuronOutputs,
@@ -684,7 +718,6 @@ namespace JBrain
 		}
 
 		return retVal;
-
 	}
 
 	std::vector<JBrain*> JBrainFactory::getFullMutatedPopulation(JBrain* parent)

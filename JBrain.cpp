@@ -51,6 +51,7 @@ namespace JBrain
 		const unsigned int& minStartingNeurons,
 		const unsigned int& maxStartingNeurons,
 		const unsigned int& maxNeurons,
+		const bool& useOutputNeurons,
 		const float& neuronStartingHealth,
 		const float& neuronCGPOutputLowHealthChange,
 		const float& neuronCGPOutputHighHealthChange,
@@ -92,6 +93,9 @@ namespace JBrain
 		const std::vector<CGP::CGP_INPUT>& dendriteInputs,
 		const std::vector<CGP::CGP_OUTPUT>& dendriteOutputs,
 		const unsigned int& dendriteProgramNodes,
+		const std::vector<CGP::CGP_INPUT>& outputDendriteInputs,
+		const std::vector<CGP::CGP_OUTPUT>& outputDendriteOutputs,
+		const unsigned int& outputDendriteProgramNodes,
 		const std::vector<CGP::CGP_INPUT>& axonInputs,
 		const std::vector<CGP::CGP_OUTPUT>& axonOutputs,
 		const unsigned int& axonProgramNodes,
@@ -138,6 +142,7 @@ namespace JBrain
 		m_minStartingNeurons(minStartingNeurons),
 		m_maxStartingNeurons(maxStartingNeurons),
 		m_maxNeurons(maxNeurons),
+		m_useOutputNeurons(useOutputNeurons),
 		m_neuronStartingHealth(neuronStartingHealth),
 		m_neuronCGPOutputLowHealthChange(neuronCGPOutputLowHealthChange),
 		m_neuronCGPOutputHighHealthChange(neuronCGPOutputHighHealthChange),
@@ -183,14 +188,18 @@ namespace JBrain
 		m_sageMatchPercent(1.0),
 		m_dendriteInputs(dendriteInputs),
 		m_dendriteOutputs(dendriteOutputs),
+		m_outputDendriteInputs(outputDendriteInputs),
+		m_outputDendriteOutputs(outputDendriteOutputs),
 		m_axonInputs(axonInputs),
 		m_axonOutputs(axonOutputs),
 		m_neuronInputs(neuronInputs),
 		m_neuronOutputs(neuronOutputs),
 		m_dendriteProgramNodes(dendriteProgramNodes),
+		m_outputDendriteProgramNodes(outputDendriteProgramNodes),
 		m_axonProgramNodes(axonProgramNodes),
 		m_neuronProgramNodes(neuronProgramNodes),
 	    m_CGPDendriteUpdater(nullptr),
+		m_CGPOutputDendriteUpdater(nullptr),
 		m_CGPAxonUpdater(nullptr),
 		m_CGPNeuronUpdater(nullptr),
 		m_CGPChemicalUpdater(nullptr),
@@ -225,9 +234,11 @@ namespace JBrain
 		// To ensure that all brains created with the same inputs and outputs
 		// use the same ordering, sort them here:
 		std::sort(m_dendriteInputs.begin(), m_dendriteInputs.end());
+		std::sort(m_outputDendriteInputs.begin(), m_outputDendriteInputs.end());
 		std::sort(m_axonInputs.begin(), m_axonInputs.end());
 		std::sort(m_neuronInputs.begin(), m_neuronInputs.end());
 		std::sort(m_dendriteOutputs.begin(), m_dendriteOutputs.end());
+		std::sort(m_outputDendriteOutputs.begin(), m_outputDendriteOutputs.end());
 		std::sort(m_axonOutputs.begin(), m_axonOutputs.end());
 		std::sort(m_neuronOutputs.begin(), m_neuronOutputs.end());
 
@@ -258,7 +269,7 @@ namespace JBrain
 			other.m_neuronRefractoryPeriod, other.m_neuronDuplicateNearby,
 			other.m_neuronMinNearbyDistance, other.m_neuronMaxNearbyDistance,
 			other.m_minStartingNeurons, other.m_maxStartingNeurons, other.m_maxNeurons,
-			other.m_neuronStartingHealth,
+			other.m_useOutputNeurons, other.m_neuronStartingHealth,
 			other.m_neuronCGPOutputLowHealthChange,
 			other.m_neuronCGPOutputHighHealthChange,
 			other.m_neuronCGPOutputHealthChangeAmount,
@@ -284,15 +295,20 @@ namespace JBrain
 			other.m_circuitsCanOverlap, other.m_minP, other.m_maxP,
 			other.m_minConstraint, other.m_maxConstraint,
 			other.m_maxNeuronAge, other.m_dendriteInputs, other.m_dendriteOutputs,
-			other.m_dendriteProgramNodes, other.m_axonInputs, other.m_axonOutputs,
-			other.m_axonProgramNodes, other.m_neuronInputs, other.m_neuronOutputs,
-			other.m_neuronProgramNodes, other.m_updateEvent, other.m_updateFrequency,
-			other.m_functionStringList, other.m_functionList,
+			other.m_dendriteProgramNodes, other.m_outputDendriteInputs,
+			other.m_outputDendriteOutputs, other.m_outputDendriteProgramNodes,
+			other.m_axonInputs, other.m_axonOutputs, other.m_axonProgramNodes,
+			other.m_neuronInputs, other.m_neuronOutputs, other.m_neuronProgramNodes,
+			other.m_updateEvent, other.m_updateFrequency, other.m_functionStringList,
+			other.m_functionList,
 			false) // Need to create CGP & inputs/outputs.
 	{
 		// Create all CGP Updaters:
 		if (other.m_CGPDendriteUpdater != nullptr)
 			m_CGPDendriteUpdater = new CGP::JBrainCGPIndividual(*other.m_CGPDendriteUpdater);
+
+		if (other.m_CGPOutputDendriteUpdater != nullptr)
+			m_CGPOutputDendriteUpdater = new CGP::JBrainCGPIndividual(*other.m_CGPOutputDendriteUpdater);
 
 		if (other.m_CGPAxonUpdater != nullptr)
 			m_CGPAxonUpdater = new CGP::JBrainCGPIndividual(*other.m_CGPAxonUpdater);
@@ -304,6 +320,7 @@ namespace JBrain
 			m_CGPChemicalUpdater = new CGP::JBrainCGPIndividual(*other.m_CGPChemicalUpdater);
 
 		m_neurons = other.m_neurons;
+		m_outputNeurons = other.m_outputNeurons;
 		m_currNeuronNumber = other.m_currNeuronNumber;
 		m_inputAxons = other.m_inputAxons;
 		m_outputDendrites = other.m_outputDendrites;
@@ -314,6 +331,9 @@ namespace JBrain
 		if (m_CGPDendriteUpdater != nullptr)
 			delete m_CGPDendriteUpdater;
 		
+		if (m_CGPOutputDendriteUpdater != nullptr)
+			delete m_CGPOutputDendriteUpdater;
+
 		if (m_CGPAxonUpdater != nullptr)
 			delete m_CGPAxonUpdater;
 		
@@ -333,13 +353,29 @@ namespace JBrain
 			static_cast<unsigned int>(m_dendriteOutputs.size()), // Number of outputs
 			1, // Number of rows
 			m_dendriteProgramNodes, // Number of columns
-			m_dendriteProgramNodes, // Columns back to search			
+			m_dendriteProgramNodes, // Columns back to search
 			m_minP, m_maxP, // P-values for CGP functions
 			m_functionStringList, // Available functions as strings
 			m_functionList, // Available functions as callable (dbl, dbl, dbl) functions
 			m_minConstraint, m_maxConstraint, true  // Node output constraints
 		);
 		m_CGPDendriteUpdater->randomize();
+	}
+
+	void JBrain::createOutputDendriteUpdater()
+	{
+		m_CGPOutputDendriteUpdater = new CGP::JBrainCGPIndividual(
+			static_cast<unsigned int>(m_outputDendriteInputs.size()), // Number of inputs
+			static_cast<unsigned int>(m_outputDendriteOutputs.size()), // Number of outputs
+			1, // Number of rows
+			m_outputDendriteProgramNodes, // Number of columns
+			m_outputDendriteProgramNodes, // Columns back to search			
+			m_minP, m_maxP, // P-values for CGP functions
+			m_functionStringList, // Available functions as strings
+			m_functionList, // Available functions as callable (dbl, dbl, dbl) functions
+			m_minConstraint, m_maxConstraint, true  // Node output constraints
+		);
+		m_CGPOutputDendriteUpdater->randomize();
 	}
 	
 	void JBrain::createAxonUpdater()
@@ -384,6 +420,7 @@ namespace JBrain
 	void JBrain::createAllSeparateUpdaters()
 	{
 		createDendriteUpdater();
+		createOutputDendriteUpdater();
 		createAxonUpdater();
 		createNeuronUpdater();
 		createChemicalUpdater();
@@ -564,6 +601,9 @@ namespace JBrain
 			m_inputAxons.push_back(JAxon(inX, inY, inZ));
 		}
 
+		m_outputDendrites.clear();
+		m_outputNeurons.clear();
+
 		// Outputs on one side or randomly placed:
 		for (unsigned int i = 0; i < m_actionSize; ++i)
 		{
@@ -575,7 +615,11 @@ namespace JBrain
 			else
 				inX = getRandomFloat(0.0, m_brainXSize);
 
-			m_outputDendrites.push_back(JDendrite(inX, inY, inZ, 1.0));
+			// Create an output neuron. (-1, 0) -> rand dendrite, zero axons:
+			if (m_useOutputNeurons)
+				m_outputNeurons.push_back(createNewNeuron(inX, inY, inZ, -1, 0));
+			else  // Create an output dendrite, default to 1.0 weight:
+				m_outputDendrites.push_back(JDendrite(inX, inY, inZ, 1.0));
 		}
 	}
 
@@ -635,9 +679,11 @@ namespace JBrain
 		for (unsigned int i = 0; i < m_brainProcessingStepsBetweenInputAndOutput; ++i)
 			singleTimeStepForward();
 	
-		std::vector<double> brainOut = readBrainOutputs();
+		m_mostRecentBrainOutput = readBrainOutputs();
 		int brainChoice = static_cast<int>(std::distance(
-			brainOut.begin(), std::max_element(brainOut.begin(), brainOut.end())));
+			m_mostRecentBrainOutput.begin(),
+			  std::max_element(m_mostRecentBrainOutput.begin(),
+				m_mostRecentBrainOutput.end())));
 		
 		if (sageChoice >= 0)  // We care about the sage choice:
 		{
@@ -655,7 +701,7 @@ namespace JBrain
 
 		updateAfterProcessingInput();
 
-		return brainOut;
+		return m_mostRecentBrainOutput;
 	}
 
 	void JBrain::singleTimeStepForward()
@@ -881,6 +927,8 @@ namespace JBrain
 		if (m_updateEvent == CGP::UPDATE_EVENT::BRAIN_OUTPUT)
 		{
 			++m_inputProcessingsSinceLastUpdate;
+			// With an update frequency of 1, sageMatchPercent will always
+			// be either 1.0 or 0.0.
 			if (m_inputProcessingsSinceLastUpdate >= m_updateFrequency)
 			{
 				// Config.yaml name: SAGE_MATCH_PERCENT
@@ -1006,6 +1054,10 @@ namespace JBrain
 
 	void JBrain::resetBrainForNewInputs()
 	{
+		// Clear the most recent brain output. Not strictly necessary since it will
+		// be overwritten by the processing of input, but want to catch bugs:
+		m_mostRecentBrainOutput.clear();
+
 		// If we are allowed to do a full reset, it is easy:
 		if (m_brainResetBeforeProcessingInput)
 		{
@@ -1086,6 +1138,18 @@ namespace JBrain
 		}
 	}
 
+	float JBrain::calculateInternalNeuronValue(JNeuron& neuron)
+	{
+		float totalDendriteInputs = 0.0;
+		for (unsigned int i = 0; i < neuron.m_dendrites.size(); ++i)
+		{
+			totalDendriteInputs += getDendriteInput(neuron.m_dendrites[i]);
+		}
+
+		totalDendriteInputs = applyJNeuronActivationFunction(totalDendriteInputs);
+		return totalDendriteInputs;
+	}
+
 	bool JBrain::getIfNeuronFires(JNeuron& neuron)
 	{
 		bool retFire = false;
@@ -1099,13 +1163,7 @@ namespace JBrain
 			++neuron.m_fireOpportunitiesSinceLastUpdate;
 			++neuron.m_fireOpportunitiesInThisRun;
 
-			float totalDendriteInputs = 0.0;
-			for (unsigned int i = 0; i < neuron.m_dendrites.size(); ++i)
-			{
-				totalDendriteInputs += getDendriteInput(neuron.m_dendrites[i]);
-			}
-
-			totalDendriteInputs = applyJNeuronActivationFunction(totalDendriteInputs);
+			float totalDendriteInputs = calculateInternalNeuronValue(neuron);
 
 			// Neuron firing is either probabilistic or based on a threshold value
 			// being exceeded. Probabilistic still uses the dendrite inputs, but
@@ -1190,9 +1248,21 @@ namespace JBrain
 	std::vector<double> JBrain::readBrainOutputs()
 	{
 		std::vector<double> retVal;
-		for (unsigned int i = 0; i < m_outputDendrites.size(); ++i)
+
+		// Output neurons:
+		if (m_useOutputNeurons)
 		{
-			retVal.push_back(getDendriteInput(m_outputDendrites[i]));
+			for (unsigned int i = 0; i < m_outputNeurons.size(); ++i)
+			{
+				retVal.push_back(calculateInternalNeuronValue(m_outputNeurons[i]));
+			}
+		}
+		else // Output dendrites:
+		{
+			for (unsigned int i = 0; i < m_outputDendrites.size(); ++i)
+			{
+				retVal.push_back(getDendriteInput(m_outputDendrites[i]));
+			}
 		}
 
 		return retVal;
@@ -1216,12 +1286,17 @@ namespace JBrain
 		applyCGPOutputs(neuron, nCGPOutputs);
 	}
 
-	void JBrain::applyCGP(JDendrite& dendrite, const JNeuron& parentNeuron)
+	void JBrain::applyCGP(JDendrite& dendrite, const unsigned int& parentNeuronNum, const bool& outputNeuron)
 	{
-		std::vector<double> dCGPInputs = getCGPInputs(dendrite, parentNeuron);
-		std::vector<double> dCGPOutputs = m_CGPDendriteUpdater->
-			calculateOutputs(dCGPInputs);
-		applyCGPOutputs(dendrite, dCGPOutputs, parentNeuron);
+		std::vector<double> dCGPInputs = getCGPInputs(dendrite, parentNeuronNum, outputNeuron);
+		std::vector<double> dCGPOutputs;
+		// Apply a different CGP program, depending on the type of neuron:
+		if (outputNeuron)
+			dCGPOutputs = m_CGPOutputDendriteUpdater->calculateOutputs(dCGPInputs);
+		else
+			dCGPOutputs = m_CGPDendriteUpdater->calculateOutputs(dCGPInputs);
+
+		applyCGPOutputs(dendrite, dCGPOutputs, parentNeuronNum, outputNeuron);
 	}
 
 	void JBrain::applyCGP(JAxon& axon, const JNeuron& parentNeuron)
@@ -1319,11 +1394,13 @@ namespace JBrain
 	}
 
 	void JBrain::applyCGPOutputs(JDendrite& dendrite, const std::vector<double>& cgpOutputs,
-		const JNeuron& parentNeuron)
+		const unsigned int& parentNeuronNum, const bool& outputNeuron)
 	{
 		// Sometimes, a dendrite output may take more than one cgpOutput.
 		unsigned int cgpIdx = 0;
 		float moveVal;
+		JNeuron parentNeuron = outputNeuron ? m_outputNeurons[parentNeuronNum] :
+			m_neurons[parentNeuronNum];
 
 		for (unsigned int i = 0; i < cgpOutputs.size(); ++i)
 		{
@@ -1442,10 +1519,12 @@ namespace JBrain
 	}
 
 	std::vector<double> JBrain::getCGPInputs(const JDendrite& dendrite,
-		const JNeuron& parentNeuron)
+		const unsigned int& parentNeuronNum, const bool& outputNeuron)
 	{
 		std::vector<double> retVal;
 		double tmpVal;
+		JNeuron parentNeuron = outputNeuron ? m_outputNeurons[parentNeuronNum] :
+			m_neurons[parentNeuronNum];
 
 		// Every input must be special-cased:
 		for (unsigned int i = 0; i < m_dendriteInputs.size(); ++i)
@@ -1527,6 +1606,21 @@ namespace JBrain
 
 			case CGP::CGP_INPUT::NEURON_HEALTH:
 				retVal.push_back(parentNeuron.m_health);
+				break;
+
+			// The expected value minus the real output value should be
+			// positive if the value needs to go up, negative if it needs to
+			// go down:
+			case CGP::CGP_INPUT::EXPECTED_OUTPUT_DIFF:
+				// This assumes binary possible outputs. A lot needs to change
+				// when that assumption changes.
+				// Assume sage choice of 0.0. Set to 1.0 if it was the sage choice:
+				float mostRecentSage = 0.0;
+				if (m_sageChoices[parentNeuronNum] >= 0.5)
+					mostRecentSage = 1.0;
+
+				// Sage is expected, our brain output is actual:
+				retVal.push_back(mostRecentSage - m_mostRecentBrainOutput[parentNeuronNum]);
 				break;
 			}
 		}
@@ -1640,12 +1734,17 @@ namespace JBrain
 
 			// Apply all of its dendrite's programs:
 			for (unsigned int j = 0; j < m_neurons[i].m_dendrites.size(); ++j)
-				applyCGP(m_neurons[i].m_dendrites[j], m_neurons[i]);
+				applyCGP(m_neurons[i].m_dendrites[j], i, false);
 
 			// Apply all of its axon's programs:
 			for (unsigned int j = 0; j < m_neurons[i].m_axons.size(); ++j)
 				applyCGP(m_neurons[i].m_axons[j], m_neurons[i]);
 		}
+
+		// Apply the output neuron program if needed:
+		for (unsigned int i = 0; i < m_outputNeurons.size(); ++i)
+			for (unsigned int j = 0; j < m_outputNeurons[i].m_dendrites.size(); ++j)
+				applyCGP(m_outputNeurons[i].m_dendrites[j], i, true);
 	}
 
 	std::vector<float> JBrain::getValidCoordinatesWithinDistance(
@@ -1714,7 +1813,8 @@ namespace JBrain
 			  getRandomFloat(m_dendriteMinWeight, m_dendriteMaxWeight)));
 	}
 	
-	JNeuron JBrain::createNewNeuron(const float& x, const float& y, const float& z)
+	JNeuron JBrain::createNewNeuron(const float& x, const float& y, const float& z,
+		const int& dendriteCount, const int& axonCount)
 	{
 		JNeuron neuron(
 			x, y, z,
@@ -1722,13 +1822,20 @@ namespace JBrain
 			m_neuronFireThreshold, m_neuronStartingHealth,
 			getNextNeuronNumber());
 
-		// Determine how many axon and dendrites to add:
-		int totalDendrites = getRandomInt(
-			static_cast<int>(m_dendriteMinCount),
-			static_cast<int>(m_dendriteMaxCount));
-		int totalAxon = getRandomInt(
-			static_cast<int>(m_axonMinCount),
-			static_cast<int>(m_axonMaxCount));
+		// Determine how many axon and dendrites to add. -1 indicates random:
+		int totalDendrites = dendriteCount;
+		int totalAxon = axonCount;
+		
+		if (totalDendrites == -1)
+		{
+			totalDendrites = getRandomInt(static_cast<int>(m_dendriteMinCount),
+				static_cast<int>(m_dendriteMaxCount));
+		}
+		if (totalAxon == -1)
+		{
+			totalAxon = getRandomInt(static_cast<int>(m_axonMinCount),
+				static_cast<int>(m_axonMaxCount));
+		}
 
 		// Add the dendrites and axon:
 		for (int i = 0; i < totalDendrites; ++i)
@@ -1793,6 +1900,7 @@ namespace JBrain
 
 		// A lot of variables to compare:
 		return areEqual(m_CGPDendriteUpdater, rhs.m_CGPDendriteUpdater) &&
+			areEqual(m_CGPOutputDendriteUpdater, rhs.m_CGPOutputDendriteUpdater) &&
 			(m_name == rhs.m_name) &&
 			(m_parentName == rhs.m_parentName) &&
 			(m_observationSize == rhs.m_observationSize) &&
@@ -1830,6 +1938,7 @@ namespace JBrain
 			(m_minStartingNeurons == rhs.m_minStartingNeurons) &&
 			(m_maxStartingNeurons == rhs.m_maxStartingNeurons) &&
 			(m_maxNeurons == rhs.m_maxNeurons) &&
+			(m_useOutputNeurons == rhs.m_useOutputNeurons) &&
 			(fabs(m_neuronDeathHealth - rhs.m_neuronDeathHealth) < FLT_EPSILON) &&
 			(fabs(m_neuronDeathHealth_Original - rhs.m_neuronDeathHealth_Original) < FLT_EPSILON) &&
 			(fabs(m_neuronDuplicateHealth - rhs.m_neuronDuplicateHealth) < FLT_EPSILON) &&
@@ -1969,6 +2078,7 @@ namespace JBrain
 	void JBrain::writeSelfToJson(json& j)
 	{
 		json dendCGP;
+		json outDendCGP;
 		json axonCGP;
 		json neuronCGP;
 		json chemCGP;
@@ -1978,6 +2088,11 @@ namespace JBrain
 			m_CGPDendriteUpdater->writeSelfToJson(dendCGP);
 		else
 			dendCGP = "NULL";
+
+		if (m_CGPOutputDendriteUpdater != nullptr)
+			m_CGPOutputDendriteUpdater->writeSelfToJson(outDendCGP);
+		else
+			outDendCGP = "NULL";
 
 		if (m_CGPAxonUpdater != nullptr)
 			m_CGPAxonUpdater->writeSelfToJson(axonCGP);
@@ -1995,6 +2110,7 @@ namespace JBrain
 			chemCGP = "NULL";
 
 		j["CGPDendriteUpdater"] = dendCGP;
+		j["CGPOutputDendriteUpdater"] = outDendCGP;
 		j["CGPAxonUpdater"] = axonCGP;
 		j["CGPNeuronUpdater"] = neuronCGP;
 		j["CGPChemicalUpdater"] = chemCGP;
@@ -2035,6 +2151,7 @@ namespace JBrain
 		j["minStartingNeurons"] = m_minStartingNeurons;
 		j["maxStartingNeurons"] = m_maxStartingNeurons;
 		j["maxNeurons"] = m_maxNeurons;
+		j["useOutputNeurons"] = m_useOutputNeurons;
 		j["neuronStartingHealth"] = m_neuronStartingHealth;
 		j["neuronCGPOutputLowHealthChange"] = m_neuronCGPOutputLowHealthChange;
 		j["neuronCGPOutputHighHealthChange"] = m_neuronCGPOutputHighHealthChange;
@@ -2097,6 +2214,25 @@ namespace JBrain
 			j["outputDendrites"][i]["weight"] = m_outputDendrites[i].m_weight;			
 		}
 
+		j["outputNeurons"] = json::array();
+		for (unsigned int n = 0; n < m_neurons.size(); ++n)
+		{
+			j["outputNeurons"][n]["X"] = m_neurons[n].m_X;
+			j["outputNeurons"][n]["Y"] = m_neurons[n].m_Y;
+			j["outputNeurons"][n]["Z"] = m_neurons[n].m_Z;
+			j["outputNeurons"][n]["neuronNumber"] = m_neurons[n].m_neuronNumber;
+			j["outputNeurons"][n]["age"] = m_neurons[n].m_age;
+
+			j["outputNeurons"][n]["dendrites"] = json::array();
+			for (unsigned int d = 0; d < m_neurons[n].m_dendrites.size(); ++d)
+			{
+				j["outputNeurons"][n]["dendrites"][d]["X"] = m_neurons[n].m_dendrites[d].m_X;
+				j["outputNeurons"][n]["dendrites"][d]["Y"] = m_neurons[n].m_dendrites[d].m_Y;
+				j["outputNeurons"][n]["dendrites"][d]["Z"] = m_neurons[n].m_dendrites[d].m_Z;
+				j["outputNeurons"][n]["dendrites"][d]["weight"] = m_neurons[n].m_dendrites[d].m_weight;
+			}
+		}
+
 		j["inputAxons"] = json::array();
 		for (unsigned int i = 0; i < m_inputAxons.size(); ++i)
 		{
@@ -2148,6 +2284,8 @@ namespace JBrain
 		std::vector<std::string> axonOutputsStrings;
 		std::vector<std::string> dendriteInputsStrings;
 		std::vector<std::string> dendriteOutputsStrings;
+		std::vector<std::string> outputDendriteInputsStrings;
+		std::vector<std::string> outputDendriteOutputsStrings;
 
 		for (const auto& elem : m_neuronInputs)
 			neuronInputsStrings.push_back(CGP::CGPInputToString(elem));
@@ -2173,6 +2311,14 @@ namespace JBrain
 			dendriteOutputsStrings.push_back(CGP::CGPOutputToString(elem));
 		j["dendriteOutputs"] = dendriteOutputsStrings;
 
+		for (const auto& elem : m_outputDendriteInputs)
+			outputDendriteInputsStrings.push_back(CGP::CGPInputToString(elem));
+		j["outputDendriteInputs"] = outputDendriteInputsStrings;
+
+		for (const auto& elem : m_outputDendriteOutputs)
+			outputDendriteOutputsStrings.push_back(CGP::CGPOutputToString(elem));
+		j["outputDendriteOutputs"] = outputDendriteOutputsStrings;
+
 		j["functionStringList"] = m_functionStringList;
 		j["sageChoices"] = m_sageChoices;
 		j["brainChoices"] = m_brainChoices;
@@ -2183,12 +2329,16 @@ namespace JBrain
 		// For each CGP Individual, if it isn't a string, it should be
 		// a struct, load it:
 		CGP::JBrainCGPIndividual* dendCGP = nullptr;
+		CGP::JBrainCGPIndividual* outDendCGP = nullptr;
 		CGP::JBrainCGPIndividual* axonCGP = nullptr;
 		CGP::JBrainCGPIndividual* neuronCGP = nullptr;
 		CGP::JBrainCGPIndividual* chemCGP = nullptr;
 
 		if (!j["CGPDendriteUpdater"].is_string())
 			dendCGP = CGP::JBrainCGPIndividual::getCGPIndividualFromJson(j["CGPDendriteUpdater"]);
+
+		if (!j["CGPOutputDendriteUpdater"].is_string())
+			outDendCGP = CGP::JBrainCGPIndividual::getCGPIndividualFromJson(j["CGPOutputDendriteUpdater"]);
 		
 		if (!j["CGPAxonUpdater"].is_string())
 			axonCGP = CGP::JBrainCGPIndividual::getCGPIndividualFromJson(j["CGPAxonUpdater"]);
@@ -2206,6 +2356,8 @@ namespace JBrain
 		std::vector<std::string> axonOutputsStrings = j["axonOutputs"];
 		std::vector<std::string> dendriteInputsStrings = j["dendriteInputs"];
 		std::vector<std::string> dendriteOutputsStrings = j["dendriteOutputs"];
+		std::vector<std::string> outputDendriteInputsStrings = j["outputDendriteInputs"];
+		std::vector<std::string> outputDendriteOutputsStrings = j["outputDendriteOutputs"];
 		
 		// Convert those strings back to the enums we need:
 		std::vector<CGP::CGP_INPUT> neuronInputs;
@@ -2214,6 +2366,8 @@ namespace JBrain
 		std::vector<CGP::CGP_OUTPUT> axonOutputs;
 		std::vector<CGP::CGP_INPUT> dendriteInputs;
 		std::vector<CGP::CGP_OUTPUT> dendriteOutputs;
+		std::vector<CGP::CGP_INPUT> outputDendriteInputs;
+		std::vector<CGP::CGP_OUTPUT> outputDendriteOutputs;
 		
 		for (const auto& elem : neuronInputsStrings)
 			neuronInputs.push_back(CGP::StringToCGPInput(elem));
@@ -2232,7 +2386,13 @@ namespace JBrain
 
 		for (const auto& elem : dendriteOutputsStrings)
 			dendriteOutputs.push_back(CGP::StringToCGPOutput(elem));
-		
+
+		for (const auto& elem : outputDendriteInputsStrings)
+			outputDendriteInputs.push_back(CGP::StringToCGPInput(elem));
+
+		for (const auto& elem : outputDendriteOutputsStrings)
+			outputDendriteOutputs.push_back(CGP::StringToCGPOutput(elem));
+
 		// Get/Convert the function list:
 		std::vector<std::string> functionStringList = j["functionStringList"];
 		std::vector<std::function<double(double, double, double)> > functionList;
@@ -2276,6 +2436,7 @@ namespace JBrain
 			j["minStartingNeurons"].get<unsigned int>(),
 			j["maxStartingNeurons"].get<unsigned int>(),
 			j["maxNeurons"].get<unsigned int>(),
+			j["useOutputNeurons"].get<bool>(),
 			j["neuronStartingHealth"].get<float>(),
 			j["neuronCGPOutputLowHealthChange"].get<float>(),
 			j["neuronCGPOutputHighHealthChange"].get<float>(),
@@ -2318,6 +2479,8 @@ namespace JBrain
 			j["maxNeuronAge"].get<unsigned int>(),
 			dendriteInputs, dendriteOutputs,
 			j["dendriteProgramNodes"].get<unsigned int>(),
+			outputDendriteInputs, outputDendriteOutputs,
+			j["outputDendriteProgramNodes"].get<unsigned int>(),
 			axonInputs, axonOutputs,
 			j["axonProgramNodes"].get<unsigned int>(),
 			neuronInputs, neuronOutputs,
@@ -2361,7 +2524,30 @@ namespace JBrain
 					elem["weight"].get<float>()));
 		}
 
-		// Read in each neuron:
+		// Read in the output neurons:
+		retVal->m_outputNeurons.clear();
+		for (auto& elem : j["outputNeurons"])
+		{
+			JNeuron tmpNeuron(elem["X"].get<float>(),
+				elem["Y"].get<float>(), elem["Z"].get<float>(),
+				1.0, // fireValue
+				1.0, // fireThreshold
+				1.0, // health,
+				elem["neuronNumber"].get<unsigned int>());
+			tmpNeuron.m_age = elem["age"].get<unsigned int>();
+
+			for (auto& den : elem["dendrites"])
+			{
+				tmpNeuron.m_dendrites.push_back(JDendrite(
+					den["X"].get<float>(),
+					den["Y"].get<float>(),
+					den["Z"].get<float>(),
+					den["weight"].get<float>()));
+			}
+			retVal->m_outputNeurons.push_back(tmpNeuron);
+		}
+
+		// Read in each standard neuron:
 		retVal->m_neurons.clear();
 		for (auto& elem : j["neurons"])
 		{
@@ -2799,6 +2985,11 @@ sagePercent,dendMinWeight,dendMaxWeight,dendAvgWeight,neurMinFire,neurMaxFire,ne
 				m_neuronDuplicationHealthReset = !m_neuronDuplicationHealthReset;
 			else
 				m_neuronDuplicationHealthReset = value;
+		else if (name == "UseOutputNeurons")
+			if (flipBool)
+				m_useOutputNeurons = !m_useOutputNeurons;
+			else
+				m_useOutputNeurons = value;
 		else if (name == "InputNeuronFiresAge")
 			if (flipBool)
 				m_inputNeuronFiresAge = !m_inputNeuronFiresAge;

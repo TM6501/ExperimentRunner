@@ -59,6 +59,8 @@ namespace JBrain
 		// The input and output lists to the CGP programs:
 		std::vector<CGP::CGP_INPUT> m_dendriteInputs;
 		std::vector<CGP::CGP_OUTPUT> m_dendriteOutputs;
+		std::vector<CGP::CGP_INPUT> m_outputDendriteInputs;
+		std::vector<CGP::CGP_OUTPUT> m_outputDendriteOutputs;
 		std::vector<CGP::CGP_INPUT> m_axonInputs;
 		std::vector<CGP::CGP_OUTPUT> m_axonOutputs;
 		std::vector<CGP::CGP_INPUT> m_neuronInputs;
