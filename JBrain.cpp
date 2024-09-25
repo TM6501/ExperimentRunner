@@ -2195,7 +2195,8 @@ namespace JBrain
 		j["minConstraint"] = m_minConstraint;
 		j["maxConstraint"] = m_maxConstraint;
 		j["maxNeuronAge"] = m_maxNeuronAge;		 
-		j["dendriteProgramNodes"] = m_dendriteProgramNodes;		 
+		j["dendriteProgramNodes"] = m_dendriteProgramNodes;
+		j["outputDendriteProgramNodes"] = m_outputDendriteProgramNodes;
 		j["axonProgramNodes"] = m_axonProgramNodes;		 
 		j["neuronProgramNodes"] = m_neuronProgramNodes;		 
 		j["updateFrequency"] = m_updateFrequency;
@@ -2215,21 +2216,21 @@ namespace JBrain
 		}
 
 		j["outputNeurons"] = json::array();
-		for (unsigned int n = 0; n < m_neurons.size(); ++n)
+		for (unsigned int n = 0; n < m_outputNeurons.size(); ++n)
 		{
-			j["outputNeurons"][n]["X"] = m_neurons[n].m_X;
-			j["outputNeurons"][n]["Y"] = m_neurons[n].m_Y;
-			j["outputNeurons"][n]["Z"] = m_neurons[n].m_Z;
-			j["outputNeurons"][n]["neuronNumber"] = m_neurons[n].m_neuronNumber;
-			j["outputNeurons"][n]["age"] = m_neurons[n].m_age;
+			j["outputNeurons"][n]["X"] = m_outputNeurons[n].m_X;
+			j["outputNeurons"][n]["Y"] = m_outputNeurons[n].m_Y;
+			j["outputNeurons"][n]["Z"] = m_outputNeurons[n].m_Z;
+			j["outputNeurons"][n]["neuronNumber"] = m_outputNeurons[n].m_neuronNumber;
+			j["outputNeurons"][n]["age"] = m_outputNeurons[n].m_age;
 
 			j["outputNeurons"][n]["dendrites"] = json::array();
-			for (unsigned int d = 0; d < m_neurons[n].m_dendrites.size(); ++d)
+			for (unsigned int d = 0; d < m_outputNeurons[n].m_dendrites.size(); ++d)
 			{
-				j["outputNeurons"][n]["dendrites"][d]["X"] = m_neurons[n].m_dendrites[d].m_X;
-				j["outputNeurons"][n]["dendrites"][d]["Y"] = m_neurons[n].m_dendrites[d].m_Y;
-				j["outputNeurons"][n]["dendrites"][d]["Z"] = m_neurons[n].m_dendrites[d].m_Z;
-				j["outputNeurons"][n]["dendrites"][d]["weight"] = m_neurons[n].m_dendrites[d].m_weight;
+				j["outputNeurons"][n]["dendrites"][d]["X"] = m_outputNeurons[n].m_dendrites[d].m_X;
+				j["outputNeurons"][n]["dendrites"][d]["Y"] = m_outputNeurons[n].m_dendrites[d].m_Y;
+				j["outputNeurons"][n]["dendrites"][d]["Z"] = m_outputNeurons[n].m_dendrites[d].m_Z;
+				j["outputNeurons"][n]["dendrites"][d]["weight"] = m_outputNeurons[n].m_dendrites[d].m_weight;
 			}
 		}
 
@@ -2399,7 +2400,7 @@ namespace JBrain
 
 		for (const auto& elem : functionStringList)
 			functionList.push_back(CGPFunctions::doubleIn_doubleOut::getFuncFromString(elem));
-				
+
 		JBrain* retVal = new JBrain(
 			j["name"].get<std::string>(),
 			j["parentName"].get<std::string>(),
@@ -2499,6 +2500,7 @@ namespace JBrain
 
 		// Put the updaters in place:
 		retVal->m_CGPDendriteUpdater = dendCGP;
+		retVal->m_CGPOutputDendriteUpdater = outDendCGP;
 		retVal->m_CGPAxonUpdater = axonCGP;
 		retVal->m_CGPNeuronUpdater = neuronCGP;
 		retVal->m_CGPChemicalUpdater = chemCGP;

@@ -96,6 +96,8 @@ namespace JBrain
 		CGP::JNEURON_ACTIVATION_FUNCTION getRandomJNeuronActivationFunction();
 
 	public:
+		void setNextBrainNumber(unsigned int currBrainNum) { m_currentBrainNumber = currBrainNum; }
+
 		static JBrainFactory* getInstance();
 		float getRandomFloat(const float& min, const float& max);
 		int getRandomInt(const int& min, const int& max);
