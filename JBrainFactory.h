@@ -6,7 +6,8 @@
 #include <vector>
 #include <functional>
 #include "yaml-cpp/yaml.h"
-
+#include "json.hpp"
+using json = nlohmann::json;
 namespace JBrain
 {
 	class JBrainFactory
@@ -47,6 +48,12 @@ namespace JBrain
 
 		bool m_initialized;
 		unsigned int m_currentBrainNumber; // For providing unique brain IDs.
+
+		// Information on static neuron definitions:
+		bool m_staticNeuronsDefined;
+		bool m_staticOutputNeuronsDefined;
+		json m_staticNeuronsJson;
+		json m_staticOutputNeuronsJson;
 
 		// Functions available to the JBrainCGPIndividuals:
 		std::vector<std::string> m_requiredFunctions;  // Those set to "true"

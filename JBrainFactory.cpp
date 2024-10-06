@@ -143,6 +143,38 @@ namespace JBrain
 					m_neuronConfig["ActivationFunctions"][i].as<std::string>()));
 		}
 
+		std::string filename = getConfigAsString(m_neuronConfig, "NeuronDefinitionFile", false);
+
+		// Should already be set as such, just emphasizing:
+		m_staticNeuronsDefined = false;
+		m_staticOutputNeuronsDefined = false;
+
+		if (filename != "None" && filename != "none")
+		{
+			std::ifstream inFile(filename.c_str());
+			if (inFile.is_open())
+			{
+				json j = json::parse(inFile);
+				if (j.contains("neurons"))
+				{
+					m_staticNeuronsDefined = true;
+					m_staticNeuronsJson = j["neurons"];
+				}
+
+				if (j.contains("outputNeurons"))
+				{
+					m_staticOutputNeuronsDefined = true;
+					m_staticOutputNeuronsJson = j["outputNeurons"];
+				}
+			}
+			else
+			{
+				std::cout << "Couldn't open \"" << filename << "\" as a json neuron definition file." << std::endl;
+			}
+
+			inFile.close();
+		}
+
 		return true;
 	}
 
@@ -546,7 +578,8 @@ namespace JBrain
 		std::vector<std::string> functionStringList;
 		std::vector<std::function<double(double, double, double)> >functionList;
 		getRandomCGPFunctionLists(functionStringList, functionList);
-					
+		bool useOutputNeurons = getConfigAsMutableBool(m_brainConfig, "UseOutputNeurons");
+
 		JBrain* retBrain = new JBrain(	
 			getNextBrainName(), // Name
 			"JBrainFactory", // Parent's name.
@@ -583,7 +616,7 @@ namespace JBrain
 			static_cast<unsigned int>(getIntFromConfigRange(m_brainConfig, "MinMinStartingNeurons", "MaxMinStartingNeurons")), // minStartingNeurons
 			static_cast<unsigned int>(getIntFromConfigRange(m_brainConfig, "MinMaxStartingNeurons", "MaxMaxStartingNeurons")), // maxStartingNeurons
 			static_cast<unsigned int>(getConfigAsInt(m_brainConfig, "MaxNeuronCount")), // maxNeuronCount
-			getConfigAsMutableBool(m_brainConfig, "UseOutputNeurons"), // useOutputNeurons
+			useOutputNeurons, // useOutputNeurons
 			getFloatFromConfigRange(m_neuronConfig, "MinNeuronStartingHealth", "MaxNeuronStartingHealth"),
 			getFloatFromConfigRange(m_neuronConfig, "MinLowHealthChange", "MaxLowHealthChange"),  // neuronCGPOutputLowHealthChange
 			getFloatFromConfigRange(m_neuronConfig, "MinHighHealthChange", "MaxHighHealthChange"),  // neuronCGPOutputHighHealthChange
@@ -637,8 +670,15 @@ namespace JBrain
 			functionStringList, functionList // Functions available to CGP
 		);
 
-		// Tell the brain to create enough random neurons:
-		retBrain->addRandomStartingNeurons();
+		// Create either pre-defined or random neurons:
+		if (m_staticNeuronsDefined)
+			retBrain->setNeuronsFromStaticJson(m_staticNeuronsJson, false);
+		else // Tell the brain to create enough random neurons:
+			retBrain->addRandomStartingNeurons();
+
+		// Output neurons, if defined, are already created. This will overwrite them:
+		if (useOutputNeurons && m_staticOutputNeuronsDefined)
+			retBrain->setNeuronsFromStaticJson(m_staticOutputNeuronsJson, true);
 
 		// Still need to create all the details of the equations and have the brain create CGP programs for each or one for all.
 		return retBrain;
@@ -996,7 +1036,16 @@ namespace JBrain
 		{
 			brain->handleBrainSizeChange();
 			brain->m_name = getNextBrainName();
-			brain->addRandomStartingNeurons(true);
+
+			// Create either pre-defined or random neurons:
+			if (m_staticNeuronsDefined)
+				brain->setNeuronsFromStaticJson(m_staticNeuronsJson, false);
+			else // Tell the brain to create enough random neurons:
+				brain->addRandomStartingNeurons();
+
+			// Output neurons, if defined, are already created. This will overwrite them:
+			if (brain->getUseOutputNeurons() && m_staticOutputNeuronsDefined)
+				brain->setNeuronsFromStaticJson(m_staticOutputNeuronsJson, true);
 		}
 
 		return retVal;

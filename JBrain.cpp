@@ -2592,6 +2592,58 @@ namespace JBrain
 		return retVal;
 	}
 
+	void JBrain::setNeuronsFromStaticJson(json& neuronJson, const bool& outputNeurons)
+	{		
+		// If this function is getting called, we assume there is at least 1 neuron.
+		std::vector<JNeuron> neurons;		
+		for (auto& elem : neuronJson)
+		{
+			JNeuron tmpNeuron(elem["X"].get<float>(),
+				elem["Y"].get<float>(),
+				elem["Z"].get<float>(),
+				elem["fireValue"].get<float>(),
+				elem["fireThreshold"].get<float>(),
+				elem["health"].get<float>(),
+				getNextNeuronNumber());  // Ignore the provided neuron number
+			
+			tmpNeuron.m_fireOpportunitiesSinceLastUpdate = 0;
+			tmpNeuron.m_timesFiredSinceLastUpdate = 0;;
+			tmpNeuron.m_timeStepsSinceLastFire = 0;
+			tmpNeuron.m_age = 0;
+
+			// Get the neuron's axons:
+			if (elem.contains("axons"))
+			{
+				for (auto& ax : elem["axons"])
+				{
+					tmpNeuron.m_axons.push_back(JAxon(
+						ax["X"].get<float>(),
+						ax["Y"].get<float>(),
+						ax["Z"].get<float>()));
+				}
+			}
+
+			// Get the dendrites:
+			for (auto& den : elem["dendrites"])
+			{
+				tmpNeuron.m_dendrites.push_back(JDendrite(
+					den["X"].get<float>(),
+					den["Y"].get<float>(),
+					den["Z"].get<float>(),
+					den["weight"].get<float>()));
+			}
+
+			neurons.push_back(tmpNeuron);
+		}
+
+		// Set our gathered neurons to either standard or output:
+		if (outputNeurons)
+			m_outputNeurons = neurons;
+		else
+			m_neurons = neurons;
+	}
+
+
 	bool JBrain::initializeCSVOutputFile(std::string dataDirectory)
 	{
 		// Make sure we aren't creating dangling file pointers:

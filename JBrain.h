@@ -393,6 +393,7 @@ namespace JBrain
 	public:
 		inline std::string getName() { return m_name; }
 		inline std::string getParentName() { return m_parentName; }
+		inline bool getUseOutputNeurons() { return m_useOutputNeurons; }
 		inline unsigned int getNeuronCount()
 		{ return static_cast<unsigned int>(m_neurons.size()); }
 
@@ -426,6 +427,8 @@ namespace JBrain
 			int sageChoice=-1, bool newTrial=false);
 
 		bool operator==(const JBrain& rhs);
+
+		void setNeuronsFromStaticJson(json& neuronJson, const bool& outputNeurons);
 
 		// flipBool -> Ignore the value if this is a boolean. Negate the boolean.
 		bool setValueByName(const std::string& name, const float& value);
