@@ -160,19 +160,7 @@ namespace JBrain
 		// How many brain time steps happen between when the environment values
 		// are provided to the brain and output is read from the brain.
 		unsigned int m_brainProcessingStepsBetweenInputAndOutput;
-
-		// Circuits (Nothing circuit-related is implemented, yet):
-		float m_circuitMinDimensions;
-		float m_circuitMaxDimensions;
-		bool m_circuitUseSameDimensions;  // If true, all three dimensions will be the same.
-		unsigned int m_circuitMinCircuitCount;
-		unsigned int m_circuitMaxCircuitCount;  // Setting min and max count to 0 will effectively turn off circuits.
-		float m_circuitProbabilityCircuitPassedToChild;
-		float m_circuitProbabilityFireChangeWhenOtherNeuronFires;
-		float m_circuitProbabilityNeuronDuplicateInCircuit;  // This value is checked first. If false, then duplicate-nearby is considered.
-		float m_circuitNeuronHealthChangeFromNeuronDeath;
-		float m_circuitNeuronHealthChangeFromNeuronDuplication;
-		bool m_circuitsCanOverlap;
+		unsigned int m_brainOutputsToAverageTogether;
 
 		// P is a static variable value input into each function. It is chosen
 		// randomly (and mutated) at the individual CGP-node level. These
@@ -496,19 +484,9 @@ namespace JBrain
 		    const bool& brainUseSameDimensions,
 			const bool& brainResetBeforeProcessingInput,
 			const unsigned int& brainProcessingStepsBetweenInputAndOutput,
+			const unsigned int& brainOutputsToAverageTogether,
 			const bool& brainInputsOnOneSide,
 			const bool& brainOutputsOnOneSide,
-            const float& circuitMinDimensions,
-			const float& circuitMaxDimensions,
-		    const bool& circuitUseSameDimensions,
-			const unsigned int& circuitMinCircuitCount,
-			const unsigned int& circuitMaxCircuitCount,
-		    const float& circuitProbabilityCircuitPassedToChild,
-		    const float& circuitProbabilityFireChangeWhenOtherNeuronFires,
-		    const float& circuitProbabilityNeuronDuplicateInCircuit,
-			const float& circuitNeuronHealthChangeFromNeuronDeath,
-		    const float& circuitNeuronHealthChangeFromNeuronDuplication,
-		    const bool& circuitsCanOverlap,
 			const float& minP, const float& maxP,
 			const float& minConstraint, const float& maxConstraint,
 			const unsigned int& maxNeuronAge,

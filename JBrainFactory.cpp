@@ -27,7 +27,6 @@ namespace JBrain
 		m_neuronConfig(YAML::Null),
 		m_sleepConfig(YAML::Null),
 		m_brainConfig(YAML::Null),
-		m_circuitsConfig(YAML::Null),
 		m_equationsConfig(YAML::Null),
 		m_initialized(false),
 		m_currentBrainNumber(1),
@@ -92,16 +91,7 @@ namespace JBrain
 			std::cout << yamlFilename << " must include a 'Brain' section" << std::endl;
 			goodConfig = false;
 		}
-
-		// Circuit:
-		if (fullConfig["Circuit"])
-			goodConfig = checkCircuitConfig(fullConfig["Circuit"]) && goodConfig;
-		else
-		{
-			std::cout << yamlFilename << " must include a 'Circuit' section" << std::endl;
-			goodConfig = false;
-		}
-
+		
 		// Equations:
 		if (fullConfig["Equation"])
 			goodConfig = checkEquationsConfig(fullConfig["Equation"]) && goodConfig;
@@ -188,12 +178,6 @@ namespace JBrain
 	{
 		m_brainConfig = config;
 		return true;
-	}
-
-	bool JBrainFactory::checkCircuitConfig(const YAML::Node& config)
-	{
-		m_circuitsConfig = config;
-		return true;	
 	}
 
 	bool JBrainFactory::checkEquationsConfig(const YAML::Node& config)
@@ -637,21 +621,10 @@ namespace JBrain
 			getConfigAsMutableBool(m_brainConfig, "ResetBeforeProcessingInput"),  // brainResetBeforeProcessingInput
 			static_cast<unsigned int>(getIntFromConfigRange(m_brainConfig, "MinProcessingTimeStepsBetweenInputAndOutput",
 				"MaxProcessingTimeStepsBetweenInputAndOutput")),  // brainProcessingStepsBetweenInputAndOutput
+			static_cast<unsigned int>(getIntFromConfigRange(m_brainConfig,
+				"MinOutputTimeStepsToAverageTogether", "MaxOutputTimeStepsToAverageTogether")), //braitOutputsToAverageTogether
 			getConfigAsMutableBool(m_brainConfig, "InputsOnOneSide"), // brainInputsOnOneSide
 			getConfigAsMutableBool(m_brainConfig, "OutputsOnOneSide"), // brainOutputsOnOneSide
-			getFloatFromConfigRange(m_circuitsConfig, "MinMinDimension", "MaxMinDimension"),  // circuitMinDimensions
-			getFloatFromConfigRange(m_circuitsConfig, "MinMaxDimension", "MaxMaxDimension"),  // circuitMaxDimensions
-			getConfigAsMutableBool(m_circuitsConfig, "UseSameValueForAllDimensions"),  //circuitUseSameDimensions
-			static_cast<unsigned int>(getIntFromConfigRange(m_circuitsConfig, "MinMinCircuitCount", "MaxMinCircuitCount")), // circuitMinCircuitCount
-			static_cast<unsigned int>(getIntFromConfigRange(m_circuitsConfig, "MinMaxCircuitCount", "MaxMaxCircuitCount")), // circuitMaxCircuitCount
-			getFloatFromConfigRange(m_circuitsConfig, "MinProbabilityIndividualCircuitIsPassedToChild", "MaxProbabilityIndividualCircuitIsPassedToChild"), //circuitProbabilityCircuitPassedToChild
-			// circuitProbabilityFireChangeWhenOtherNeuronFires
-			getFloatFromConfigRange(m_circuitsConfig, "MinFireProbabilityChangeDueToOtherNeuronsInTheSameCircuitFiring",
-				                    "MaxFireProbabilityChangeDueToOtherNeuronsInTheSameCircuitFiring"),			
-			getFloatFromConfigRange(m_circuitsConfig, "MinNeuronDuplicatesInSameCircuit", "MaxNeuronDuplicatesInSameCircuit"), // circuitProbabilityNeuronDuplicateInCircuit
-			getFloatFromConfigRange(m_circuitsConfig, "MinNeuronHealthChangeFromDeath", "MaxNeuronHealthChangeFromDeath"), // circuitNeuronHealthChangeFromNeuronDeath
-			getFloatFromConfigRange(m_circuitsConfig, "MinNeuronHealthChangeFromDuplication", "MaxNeuronHealthChangeFromDuplication"), // circuitNeuronHealthChangeFromNeuronDuplication
-			getConfigAsMutableBool(m_circuitsConfig, "CircuitsCanOverlap"), // circuitsCanOverlap
 			getFloatFromConfigRange(m_equationsConfig, "MinMinP", "MaxMinP"), // MinP
 			getFloatFromConfigRange(m_equationsConfig, "MinMaxP", "MaxMaxP"), // MaxP
 			getFloatFromConfigRange(m_equationsConfig, "MinLowConstraint", "MaxLowConstraint"), // minConstraint
@@ -826,7 +799,8 @@ namespace JBrain
 		};
 
 		static paramList intMutations_brain{
-			{ "ProcessingTimeStepsBetweenInputAndOutput", "BrainProcessingStepsBetweenInputAndOutput" }
+			{ "ProcessingTimeStepsBetweenInputAndOutput", "BrainProcessingStepsBetweenInputAndOutput" },
+			{ "OutputTimeStepsToAverageTogether", "BrainOutputsToAverageTogether" }
 		};
 
 		static paramList intMutations_equation{

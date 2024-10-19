@@ -74,19 +74,9 @@ namespace JBrain
 		const bool& brainUseSameDimensions,
 		const bool& brainResetBeforeProcessingInput,
 		const unsigned int& brainProcessingStepsBetweenInputAndOutput,
+		const unsigned int& brainOutputsToAverageTogether,
 		const bool& brainInputsOnOneSide,
 		const bool& brainOutputsOnOneSide,
-		const float& circuitMinDimensions,
-		const float& circuitMaxDimensions,
-		const bool& circuitUseSameDimensions,
-		const unsigned int& circuitMinCircuitCount,
-		const unsigned int& circuitMaxCircuitCount,
-		const float& circuitProbabilityCircuitPassedToChild,
-		const float& circuitProbabilityFireChangeWhenOtherNeuronFires,
-		const float& circuitProbabilityNeuronDuplicateInCircuit,
-		const float& circuitNeuronHealthChangeFromNeuronDeath,
-		const float& circuitNeuronHealthChangeFromNeuronDuplication,
-		const bool& circuitsCanOverlap,
 		const float& minP, const float& maxP,
 		const float& minConstraint, const float& maxConstraint,
 		const unsigned int& maxNeuronAge,
@@ -168,19 +158,9 @@ namespace JBrain
 		m_brainUseSameDimensions(brainUseSameDimensions),
 		m_brainResetBeforeProcessingInput(brainResetBeforeProcessingInput),
 		m_brainProcessingStepsBetweenInputAndOutput(brainProcessingStepsBetweenInputAndOutput),
+		m_brainOutputsToAverageTogether(brainOutputsToAverageTogether),
 		m_brainInputsOnOneSide(brainInputsOnOneSide),
 		m_brainOutputsOnOneSide(brainOutputsOnOneSide),
-		m_circuitMinDimensions(circuitMinDimensions),
-		m_circuitMaxDimensions(circuitMaxDimensions),
-		m_circuitUseSameDimensions(circuitUseSameDimensions),
-		m_circuitMinCircuitCount(circuitMinCircuitCount),
-		m_circuitMaxCircuitCount(circuitMaxCircuitCount),
-		m_circuitProbabilityCircuitPassedToChild(circuitProbabilityCircuitPassedToChild),
-		m_circuitProbabilityFireChangeWhenOtherNeuronFires(circuitProbabilityFireChangeWhenOtherNeuronFires),
-		m_circuitProbabilityNeuronDuplicateInCircuit(circuitProbabilityNeuronDuplicateInCircuit),
-		m_circuitNeuronHealthChangeFromNeuronDeath(circuitNeuronHealthChangeFromNeuronDeath),
-		m_circuitNeuronHealthChangeFromNeuronDuplication(circuitNeuronHealthChangeFromNeuronDuplication),
-		m_circuitsCanOverlap(circuitsCanOverlap),
 		m_minP(minP), m_maxP(maxP),
 		m_minConstraint(minConstraint), m_maxConstraint(maxConstraint),
 		m_maxNeuronAge(maxNeuronAge),
@@ -283,17 +263,9 @@ namespace JBrain
 			other.m_brainZSize, other.m_brainUseSameDimensions,
 			other.m_brainResetBeforeProcessingInput,
 			other.m_brainProcessingStepsBetweenInputAndOutput,
+			other.m_brainOutputsToAverageTogether,
 			other.m_brainInputsOnOneSide, other.m_brainOutputsOnOneSide,
-			other.m_circuitMinDimensions, other.m_circuitMaxDimensions,
-			other.m_circuitUseSameDimensions, other.m_circuitMinCircuitCount,
-			other.m_circuitMaxCircuitCount,
-			other.m_circuitProbabilityCircuitPassedToChild,
-			other.m_circuitProbabilityFireChangeWhenOtherNeuronFires,
-			other.m_circuitProbabilityNeuronDuplicateInCircuit,
-			other.m_circuitNeuronHealthChangeFromNeuronDeath,
-			other.m_circuitNeuronHealthChangeFromNeuronDuplication,
-			other.m_circuitsCanOverlap, other.m_minP, other.m_maxP,
-			other.m_minConstraint, other.m_maxConstraint,
+			other.m_minP, other.m_maxP, other.m_minConstraint, other.m_maxConstraint,
 			other.m_maxNeuronAge, other.m_dendriteInputs, other.m_dendriteOutputs,
 			other.m_dendriteProgramNodes, other.m_outputDendriteInputs,
 			other.m_outputDendriteOutputs, other.m_outputDendriteProgramNodes,
@@ -675,11 +647,36 @@ namespace JBrain
 		// Take the environment inputs and set them as the brain's inputs:
 		setAllInputAxonFires(inputs);
 
+		// Create our vector of vectors to average all outputs together:
+		std::vector<std::vector<double> > allOutputs;
+
+		// Make sure we don't roll over the unsigined int when determining when to start
+		// recording brain outputs:
+		unsigned int startOutputRecordStep = 0;
+		if (m_brainProcessingStepsBetweenInputAndOutput > m_brainOutputsToAverageTogether)
+			startOutputRecordStep = m_brainProcessingStepsBetweenInputAndOutput - m_brainOutputsToAverageTogether;
+
 		// Take an appropriate number of steps forward:
 		for (unsigned int i = 0; i < m_brainProcessingStepsBetweenInputAndOutput; ++i)
+		{
 			singleTimeStepForward();
+
+			// Check brain output:
+			if (i >= startOutputRecordStep)
+			{
+				allOutputs.push_back(readBrainOutputs());
+			}
+		}
 	
-		m_mostRecentBrainOutput = readBrainOutputs();
+		// Average all outputs together (there should be at least 1):
+		m_mostRecentBrainOutput = allOutputs[0];
+		for (unsigned int i = 1; i < allOutputs.size(); ++i)
+			for (unsigned int j = 0; j < allOutputs[i].size(); ++j)
+				m_mostRecentBrainOutput[j] += allOutputs[i][j];
+
+		for (unsigned int i = 0; i < m_mostRecentBrainOutput.size(); ++i)
+			m_mostRecentBrainOutput[i] /= static_cast<double>(allOutputs.size());
+
 		int brainChoice = static_cast<int>(std::distance(
 			m_mostRecentBrainOutput.begin(),
 			  std::max_element(m_mostRecentBrainOutput.begin(),
@@ -1963,17 +1960,7 @@ namespace JBrain
 			(m_brainInputsOnOneSide == rhs.m_brainInputsOnOneSide) &&
 			(m_brainOutputsOnOneSide == rhs.m_brainOutputsOnOneSide) &&
 			(m_brainProcessingStepsBetweenInputAndOutput == rhs.m_brainProcessingStepsBetweenInputAndOutput) &&
-			(fabs(m_circuitMinDimensions - rhs.m_circuitMinDimensions) < FLT_EPSILON) &&
-			(fabs(m_circuitMaxDimensions - rhs.m_circuitMaxDimensions) < FLT_EPSILON) &&
-			(m_circuitUseSameDimensions == rhs.m_circuitUseSameDimensions) &&
-			(m_circuitMinCircuitCount == rhs.m_circuitMinCircuitCount) &&
-			(m_circuitMaxCircuitCount == rhs.m_circuitMaxCircuitCount) &&
-			(fabs(m_circuitProbabilityCircuitPassedToChild - rhs.m_circuitProbabilityCircuitPassedToChild) < FLT_EPSILON) &&
-			(fabs(m_circuitProbabilityFireChangeWhenOtherNeuronFires - rhs.m_circuitProbabilityFireChangeWhenOtherNeuronFires) < FLT_EPSILON) &&
-			(fabs(m_circuitProbabilityNeuronDuplicateInCircuit - rhs.m_circuitProbabilityNeuronDuplicateInCircuit) < FLT_EPSILON) &&
-			(fabs(m_circuitNeuronHealthChangeFromNeuronDeath - rhs.m_circuitNeuronHealthChangeFromNeuronDeath) < FLT_EPSILON) &&
-			(fabs(m_circuitNeuronHealthChangeFromNeuronDuplication - rhs.m_circuitNeuronHealthChangeFromNeuronDuplication) < FLT_EPSILON) &&
-			(m_circuitsCanOverlap == rhs.m_circuitsCanOverlap) &&
+			(m_brainOutputsToAverageTogether == rhs.m_brainOutputsToAverageTogether) &&
 			(fabs(m_minP - rhs.m_minP) < FLT_EPSILON) &&
 			(fabs(m_maxP - rhs.m_maxP) < FLT_EPSILON) &&
 			(fabs(m_minConstraint - rhs.m_minConstraint) < FLT_EPSILON) &&
@@ -2031,22 +2018,6 @@ namespace JBrain
 		m_brainYSize = fullConfig["brainYSize"].as<float>();
 		m_brainZSize = fullConfig["brainZSize"].as<float>();
 		m_brainUseSameDimensions = fullConfig["brainUseSameDimensions"].as<bool>();
-		m_circuitMinDimensions = fullConfig["circuitMinDimensions"].as<float>();
-		m_circuitMaxDimensions = fullConfig["circuitMaxDimensions"].as<float>();
-		m_circuitUseSameDimensions = fullConfig["circuitUseSameDimensions"].as<bool>();
-		m_circuitMinCircuitCount = fullConfig["circuitMinCircuitCount"].as<unsigned int>();
-		m_circuitMaxCircuitCount = fullConfig["circuitMaxCircuitCount"].as<unsigned int>();
-		m_circuitProbabilityCircuitPassedToChild = 
-			fullConfig["circuitProbabilityCircuitPassedToChild"].as<float>();
-		m_circuitProbabilityFireChangeWhenOtherNeuronFires = 
-			fullConfig["circuitProbabilityFireChangeWhenOtherNeuronFires"].as<float>();
-		m_circuitProbabilityNeuronDuplicateInCircuit = 
-			fullConfig["circuitProbabilityNeuronDuplicateInCircuit"].as<float>();
-		m_circuitNeuronHealthChangeFromNeuronDeath = 
-			fullConfig["circuitHealthChangeFromNeuronDeath"].as<float>();
-		m_circuitNeuronHealthChangeFromNeuronDuplication = 
-			fullConfig["circuitHealthChangeFromNeuronDuplication"].as<float>();
-		m_circuitsCanOverlap = fullConfig["circuitsCanOverlap"].as<bool>();
 		
 		// Let the update functions read themselves in:
 		m_CGPDendriteUpdater = nullptr;
@@ -2177,19 +2148,9 @@ namespace JBrain
 		j["brainUseSameDimensions"] = m_brainUseSameDimensions;
 		j["brainResetBeforeProcessingInput"] = m_brainResetBeforeProcessingInput;
 		j["brainProcessingStepsBetweenInputAndOutput"] = m_brainProcessingStepsBetweenInputAndOutput;
+		j["brainOutputsToAverageTogether"] = m_brainOutputsToAverageTogether;
 		j["brainInputsOnOneSide"] = m_brainInputsOnOneSide;
 		j["brainOutputsOnOneSide"] = m_brainOutputsOnOneSide;
-		j["circuitMinDimensions"] = m_circuitMinDimensions;
-		j["circuitMaxDimensions"] = m_circuitMaxDimensions;
-		j["circuitUseSameDimensions"] = m_circuitUseSameDimensions;
-		j["circuitMinCircuitCount"] = m_circuitMinCircuitCount;
-		j["circuitMaxCircuitCount"] = m_circuitMaxCircuitCount;
-		j["circuitProbabilityCircuitPassedToChild"] = m_circuitProbabilityCircuitPassedToChild;
-		j["circuitProbabilityFireChangeWhenOtherNeuronFires"] = m_circuitProbabilityFireChangeWhenOtherNeuronFires;
-		j["circuitProbabilityNeuronDuplicateInCircuit"] = m_circuitProbabilityNeuronDuplicateInCircuit;
-		j["circuitNeuronHealthChangeFromNeuronDeath"] = m_circuitNeuronHealthChangeFromNeuronDeath;
-		j["circuitNeuronHealthChangeFromNeuronDuplication"] = m_circuitNeuronHealthChangeFromNeuronDuplication;
-		j["circuitsCanOverlap"] = m_circuitsCanOverlap;
 		j["minP"] = m_minP;
 		j["maxP"] = m_maxP;
 		j["minConstraint"] = m_minConstraint;
@@ -2460,19 +2421,9 @@ namespace JBrain
 			j["brainUseSameDimensions"].get<bool>(),
 			j["brainResetBeforeProcessingInput"].get<bool>(),
 			j["brainProcessingStepsBetweenInputAndOutput"].get<unsigned int>(),
+			j["brainOutputsToAverageTogether"].get<unsigned int>(),
 			j["brainInputsOnOneSide"].get<bool>(),
 			j["brainOutputsOnOneSide"].get<bool>(),
-			j["circuitMinDimensions"].get<float>(),
-			j["circuitMaxDimensions"].get<float>(),
-			j["circuitUseSameDimensions"].get<bool>(),
-			j["circuitMinCircuitCount"].get<unsigned int>(),
-			j["circuitMaxCircuitCount"].get<unsigned int>(),
-			j["circuitProbabilityCircuitPassedToChild"].get<float>(),
-			j["circuitProbabilityFireChangeWhenOtherNeuronFires"].get<float>(),
-			j["circuitProbabilityNeuronDuplicateInCircuit"].get<float>(),
-			j["circuitNeuronHealthChangeFromNeuronDeath"].get<float>(),
-			j["circuitNeuronHealthChangeFromNeuronDuplication"].get<float>(),
-			j["circuitsCanOverlap"].get<bool>(),
 			j["minP"].get<float>(),
 			j["maxP"].get<float>(),
 			j["minConstraint"].get<float>(),
@@ -2593,9 +2544,9 @@ namespace JBrain
 	}
 
 	void JBrain::setNeuronsFromStaticJson(json& neuronJson, const bool& outputNeurons)
-	{		
+	{
 		// If this function is getting called, we assume there is at least 1 neuron.
-		std::vector<JNeuron> neurons;		
+		std::vector<JNeuron> neurons;
 		for (auto& elem : neuronJson)
 		{
 			JNeuron tmpNeuron(elem["X"].get<float>(),
@@ -2605,7 +2556,7 @@ namespace JBrain
 				elem["fireThreshold"].get<float>(),
 				elem["health"].get<float>(),
 				getNextNeuronNumber());  // Ignore the provided neuron number
-			
+
 			tmpNeuron.m_fireOpportunitiesSinceLastUpdate = 0;
 			tmpNeuron.m_timesFiredSinceLastUpdate = 0;;
 			tmpNeuron.m_timeStepsSinceLastFire = 0;
@@ -2850,11 +2801,8 @@ sagePercent,dendMinWeight,dendMaxWeight,dendAvgWeight,neurMinFire,neurMaxFire,ne
 			m_neuronFireLifetime = value;		
 		else if (name == "BrainProcessingStepsBetweenInputAndOutput")
 			m_brainProcessingStepsBetweenInputAndOutput = value;
-		/* Circuit values ignored until circuit code is implemented
-		else if (name == "CircuitMinDimensions")
-			m_circuitMinDimensions = value;
-		...
-		*/		
+		else if (name == "BrainOutputsToAverageTogether")
+			m_brainOutputsToAverageTogether = value;
 		else if (name == "UpdateProgramFrequency")
 			m_updateFrequency = value;		
 
@@ -2937,12 +2885,7 @@ sagePercent,dendMinWeight,dendMaxWeight,dendAvgWeight,neurMinFire,neurMaxFire,ne
 		else if (name == "BrainYSize")
 			m_brainYSize = value;
 		else if (name == "BrainZSize")
-			m_brainZSize = value;		
-		/* Circuit values ignored until circuit code is implemented
-		else if (name == "CircuitMinDimensions")
-			m_circuitMinDimensions = value;
-		...
-		*/
+			m_brainZSize = value;
 		else if (name == "CGPMinConstraint")
 		{
 			m_minConstraint = value;
@@ -3079,11 +3022,6 @@ sagePercent,dendMinWeight,dendMaxWeight,dendAvgWeight,neurMinFire,neurMaxFire,ne
 				m_brainResetBeforeProcessingInput = !m_brainResetBeforeProcessingInput;
 			else
 				m_brainResetBeforeProcessingInput = value;
-		/* Circuit values ignored until circuit code is implemented
-		else if (name == "CircuitMinDimensions")
-			m_circuitMinDimensions = value;
-		...
-		*/		
 		/* Not implementing mutations of available function in CGP for now.*/
 		// else if (name == "CGPUseFunc_AND")
 			// doStuff();
@@ -3117,15 +3055,6 @@ sagePercent,dendMinWeight,dendMaxWeight,dendAvgWeight,neurMinFire,neurMaxFire,ne
 		out << "\tUse Post-Train Sleep: " << m_usePostTrainSleep << std::endl;
 		out << "\tBrain Dimensions: " << m_brainXSize << " x " << m_brainYSize << " x " << m_brainZSize << std::endl;
 		out << "\tBrain Use Same Dimensions: " << m_brainUseSameDimensions << std::endl;
-		out << "\tCircuit Dimensions: " << m_circuitMinDimensions << " - " << m_circuitMaxDimensions << std::endl;
-		out << "\tCircuit Use Same Dimensions: " << m_circuitUseSameDimensions << std::endl;
-		out << "\tCircuit Counts: " << m_circuitMinCircuitCount << " - " << m_circuitMaxCircuitCount << std::endl;
-		out << "\tProbability Circuit Passed to Child: " << m_circuitProbabilityCircuitPassedToChild << std::endl;
-		out << "\tProbability/Threshold Fire Change from other neurons firing in the same circuit: " << m_circuitProbabilityFireChangeWhenOtherNeuronFires << std::endl;
-		out << "\tProbability Duplication happens in the same circuit: " << m_circuitProbabilityNeuronDuplicateInCircuit << std::endl;
-		out << "\tNeuron health change from neuron in same circuit dying: " << m_circuitNeuronHealthChangeFromNeuronDeath << std::endl;
-		out << "\tNeuron health change from neuron in same circuit duplicating: " << m_circuitNeuronHealthChangeFromNeuronDuplication << std::endl;
-		out << "\tCircuits can overlap: " << m_circuitsCanOverlap << std::endl;
 		out << "\tUpdate programs will run after every " << m_updateFrequency << " occurences of " << CGP::UpdateEventToString(m_updateEvent) << std::endl;
 		out << "\tDendrite updater CGP: " << m_CGPDendriteUpdater << std::endl;
 		out << "\tAxon Updater CGP: " << m_CGPAxonUpdater << std::endl;

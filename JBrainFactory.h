@@ -30,7 +30,6 @@ namespace JBrain
 		bool checkNeuronConfig(const YAML::Node& config);
 		bool checkSleepConfig(const YAML::Node& config);
 		bool checkBrainConfig(const YAML::Node& config);
-		bool checkCircuitConfig(const YAML::Node& config);
 		bool checkEquationsConfig(const YAML::Node& config);
 
 		void buildDendriteCGPLists();
@@ -43,7 +42,6 @@ namespace JBrain
 		YAML::Node m_neuronConfig;
 		YAML::Node m_sleepConfig;
 		YAML::Node m_brainConfig;
-		YAML::Node m_circuitsConfig;
 		YAML::Node m_equationsConfig;
 
 		bool m_initialized;
