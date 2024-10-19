@@ -157,6 +157,9 @@ namespace JBrain
 		bool m_brainInputsOnOneSide;
 		bool m_brainOutputsOnOneSide;
 
+		// Output calculations ignore inputs from input axons:
+		bool m_brainOutputsIgnoreEnvironmentInputs;
+
 		// How many brain time steps happen between when the environment values
 		// are provided to the brain and output is read from the brain.
 		unsigned int m_brainProcessingStepsBetweenInputAndOutput;
@@ -301,11 +304,11 @@ namespace JBrain
 		// and distance deterioration as well as its own weight. This will
 		// update the dendrite's most recent input values and location of its
 		// biggest contributor:
-		float getDendriteInput(JDendrite& dendrite);
+		float getDendriteInput(JDendrite& dendrite, const bool& ignoreEnvironmentInputs=false);
 
 		// Check if neuron fires:
 		bool getIfNeuronFires(JNeuron& neuron);
-		float calculateInternalNeuronValue(JNeuron& neuron);
+		float calculateInternalNeuronValue(JNeuron& neuron, const bool& ignoreEnvironmentInputs=false);
 
 		// The steps taken by this single timestep:
 		// 1. Increment the age of all neuron fires and times since the neurons
@@ -487,6 +490,7 @@ namespace JBrain
 			const unsigned int& brainOutputsToAverageTogether,
 			const bool& brainInputsOnOneSide,
 			const bool& brainOutputsOnOneSide,
+			const bool& brainOutputsIgnoreEnvironmentInputs,
 			const float& minP, const float& maxP,
 			const float& minConstraint, const float& maxConstraint,
 			const unsigned int& maxNeuronAge,

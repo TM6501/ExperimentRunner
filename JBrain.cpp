@@ -77,6 +77,7 @@ namespace JBrain
 		const unsigned int& brainOutputsToAverageTogether,
 		const bool& brainInputsOnOneSide,
 		const bool& brainOutputsOnOneSide,
+		const bool& brainOutputsIgnoreEnvironmentInputs,
 		const float& minP, const float& maxP,
 		const float& minConstraint, const float& maxConstraint,
 		const unsigned int& maxNeuronAge,
@@ -161,6 +162,7 @@ namespace JBrain
 		m_brainOutputsToAverageTogether(brainOutputsToAverageTogether),
 		m_brainInputsOnOneSide(brainInputsOnOneSide),
 		m_brainOutputsOnOneSide(brainOutputsOnOneSide),
+		m_brainOutputsIgnoreEnvironmentInputs(brainOutputsIgnoreEnvironmentInputs),
 		m_minP(minP), m_maxP(maxP),
 		m_minConstraint(minConstraint), m_maxConstraint(maxConstraint),
 		m_maxNeuronAge(maxNeuronAge),
@@ -265,8 +267,9 @@ namespace JBrain
 			other.m_brainProcessingStepsBetweenInputAndOutput,
 			other.m_brainOutputsToAverageTogether,
 			other.m_brainInputsOnOneSide, other.m_brainOutputsOnOneSide,
-			other.m_minP, other.m_maxP, other.m_minConstraint, other.m_maxConstraint,
-			other.m_maxNeuronAge, other.m_dendriteInputs, other.m_dendriteOutputs,
+			other.m_brainOutputsIgnoreEnvironmentInputs, other.m_minP, other.m_maxP,
+			other.m_minConstraint, other.m_maxConstraint, other.m_maxNeuronAge,
+			other.m_dendriteInputs, other.m_dendriteOutputs,
 			other.m_dendriteProgramNodes, other.m_outputDendriteInputs,
 			other.m_outputDendriteOutputs, other.m_outputDendriteProgramNodes,
 			other.m_axonInputs, other.m_axonOutputs, other.m_axonProgramNodes,
@@ -1135,12 +1138,12 @@ namespace JBrain
 		}
 	}
 
-	float JBrain::calculateInternalNeuronValue(JNeuron& neuron)
+	float JBrain::calculateInternalNeuronValue(JNeuron& neuron, const bool& ignoreEnvironmentInputs)
 	{
 		float totalDendriteInputs = 0.0;
 		for (unsigned int i = 0; i < neuron.m_dendrites.size(); ++i)
 		{
-			totalDendriteInputs += getDendriteInput(neuron.m_dendrites[i]);
+			totalDendriteInputs += getDendriteInput(neuron.m_dendrites[i], ignoreEnvironmentInputs);
 		}
 
 		totalDendriteInputs = applyJNeuronActivationFunction(totalDendriteInputs);
@@ -1183,7 +1186,7 @@ namespace JBrain
 		return retFire;
 	}
 
-	float JBrain::getDendriteInput(JDendrite& dendrite)
+	float JBrain::getDendriteInput(JDendrite& dendrite, const bool& ignoreEnvironmentInputs)
 	{
 		// Go through every neuron firing and calculate its input into this dendrite:
 		float distance;		
@@ -1194,6 +1197,10 @@ namespace JBrain
 		float totalInput = 0.0;
 		for (unsigned int i = 0; i < m_neuronFires.size(); ++i)
 		{
+			// Environment input and we should ignore it:
+			if (m_neuronFires[i].m_environmentInput && ignoreEnvironmentInputs)
+				continue;
+
 			// Every neuron fires at a specific value:
 			fireValue = m_neuronFires[i].m_fireValue;
 
@@ -1251,14 +1258,14 @@ namespace JBrain
 		{
 			for (unsigned int i = 0; i < m_outputNeurons.size(); ++i)
 			{
-				retVal.push_back(calculateInternalNeuronValue(m_outputNeurons[i]));
+				retVal.push_back(calculateInternalNeuronValue(m_outputNeurons[i], m_brainOutputsIgnoreEnvironmentInputs));
 			}
 		}
 		else // Output dendrites:
 		{
 			for (unsigned int i = 0; i < m_outputDendrites.size(); ++i)
 			{
-				retVal.push_back(getDendriteInput(m_outputDendrites[i]));
+				retVal.push_back(getDendriteInput(m_outputDendrites[i], m_brainOutputsIgnoreEnvironmentInputs));
 			}
 		}
 
@@ -1959,6 +1966,7 @@ namespace JBrain
 			(m_brainResetBeforeProcessingInput == rhs.m_brainResetBeforeProcessingInput) &&
 			(m_brainInputsOnOneSide == rhs.m_brainInputsOnOneSide) &&
 			(m_brainOutputsOnOneSide == rhs.m_brainOutputsOnOneSide) &&
+			(m_brainOutputsIgnoreEnvironmentInputs == rhs.m_brainOutputsIgnoreEnvironmentInputs) &&
 			(m_brainProcessingStepsBetweenInputAndOutput == rhs.m_brainProcessingStepsBetweenInputAndOutput) &&
 			(m_brainOutputsToAverageTogether == rhs.m_brainOutputsToAverageTogether) &&
 			(fabs(m_minP - rhs.m_minP) < FLT_EPSILON) &&
@@ -2151,6 +2159,7 @@ namespace JBrain
 		j["brainOutputsToAverageTogether"] = m_brainOutputsToAverageTogether;
 		j["brainInputsOnOneSide"] = m_brainInputsOnOneSide;
 		j["brainOutputsOnOneSide"] = m_brainOutputsOnOneSide;
+		j["brainOutputsIgnoreEnvironmentInputs"] = m_brainOutputsIgnoreEnvironmentInputs;
 		j["minP"] = m_minP;
 		j["maxP"] = m_maxP;
 		j["minConstraint"] = m_minConstraint;
@@ -2424,6 +2433,7 @@ namespace JBrain
 			j["brainOutputsToAverageTogether"].get<unsigned int>(),
 			j["brainInputsOnOneSide"].get<bool>(),
 			j["brainOutputsOnOneSide"].get<bool>(),
+			j["brainOutputsIgnoreEnvironmentInputs"].get<bool>(),
 			j["minP"].get<float>(),
 			j["maxP"].get<float>(),
 			j["minConstraint"].get<float>(),
@@ -3012,6 +3022,11 @@ sagePercent,dendMinWeight,dendMaxWeight,dendAvgWeight,neurMinFire,neurMaxFire,ne
 				m_brainOutputsOnOneSide = !m_brainOutputsOnOneSide;
 			else
 				m_brainOutputsOnOneSide = value;
+		else if (name == "brainOutputsIgnoreEnvironmentInputs")
+			if (flipBool)
+				m_brainOutputsIgnoreEnvironmentInputs = !m_brainOutputsIgnoreEnvironmentInputs;
+			else
+				m_brainOutputsIgnoreEnvironmentInputs = value;
 		else if (name == "BrainUseSameDimensions")
 			if (flipBool)
 				m_brainUseSameDimensions = !m_brainUseSameDimensions;

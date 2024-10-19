@@ -625,6 +625,7 @@ namespace JBrain
 				"MinOutputTimeStepsToAverageTogether", "MaxOutputTimeStepsToAverageTogether")), //braitOutputsToAverageTogether
 			getConfigAsMutableBool(m_brainConfig, "InputsOnOneSide"), // brainInputsOnOneSide
 			getConfigAsMutableBool(m_brainConfig, "OutputsOnOneSide"), // brainOutputsOnOneSide
+			getConfigAsMutableBool(m_brainConfig, "OutputsIgnoreEnvironmentInputs"), //brainOutputsIgnoreEnvironmentInputs
 			getFloatFromConfigRange(m_equationsConfig, "MinMinP", "MaxMinP"), // MinP
 			getFloatFromConfigRange(m_equationsConfig, "MinMaxP", "MaxMaxP"), // MaxP
 			getFloatFromConfigRange(m_equationsConfig, "MinLowConstraint", "MaxLowConstraint"), // minConstraint
@@ -821,6 +822,7 @@ namespace JBrain
 		static paramList boolMutations_brain{
 			{ "OutputsOnOneSide", "BrainOutputsOnOneSide" },
 			{ "InputsOnOneSide", "BrainInputsOnOneSide" },
+			{ "OutputsIgnoreEnvironmentInputs", "BrainOutputsIgnoreEnvironmentInputs" },
 			{ "UseSameValueForAllDimensions", "BrainUseSameDimensions" },
 			{ "ResetBeforeProcessingInput", "ResetBeforeProcessingInput" },
 			{ "InputsAge", "InputNeuronFiresAge" }
