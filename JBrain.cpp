@@ -1892,7 +1892,7 @@ namespace JBrain
 
 		// Both not null, not pointing at the same object. Return the
 		// result of their equality operator:
-		return (*lhs == *rhs);
+		return (*lhs).operator==(*rhs);
 	}
 
 	bool JBrain::operator==(const JBrain& rhs)

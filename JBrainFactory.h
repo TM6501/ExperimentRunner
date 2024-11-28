@@ -6,7 +6,7 @@
 #include <vector>
 #include <functional>
 #include "yaml-cpp/yaml.h"
-#include "json.hpp"
+#include "JsonLib/json.hpp"
 using json = nlohmann::json;
 namespace JBrain
 {
