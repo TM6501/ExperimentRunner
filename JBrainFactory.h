@@ -10,6 +10,10 @@
 using json = nlohmann::json;
 namespace JBrain
 {
+	// Typedef for our various mutate types. Each is the name the brain
+	// expects followed by the path to reach it in the yaml file:
+	typedef std::tuple<std::string, std::vector<std::string> > namePathTuple;
+
 	class JBrainFactory
 	{
 	private:
@@ -17,6 +21,8 @@ namespace JBrain
 		// using them in mutation:
 		static const float MIN_FLOAT_MUTATE_DIFF;
 		static const int MIN_INT_MUTATE_DIFF = 1;
+		static const double	MIN_DOUBLE_MUTATE_DIFF;
+		static const int MIN_STRING_LIST_LENGTH = 2;
 
 		// Private constructor for singleton class:
 		JBrainFactory();
@@ -24,7 +30,8 @@ namespace JBrain
 		virtual const std::string classname() { return "JBrainFactory"; }
 
 		// These functions will each check a section of the configuration yaml and ensure
-		// that the provided options there satisfy all required conditions:
+		// that the provided options there satisfy all required conditions. They are only
+		// used by the growth paradigm.
 		bool checkDendriteConfig(const YAML::Node& config);
 		bool checkAxonConfig(const YAML::Node& config);
 		bool checkNeuronConfig(const YAML::Node& config);
@@ -36,7 +43,29 @@ namespace JBrain
 		void buildAxonCGPLists();
 		void buildNeuronCGPLists();
 
+		// Initialize this class based on the brain paradigm used:
+		bool initialize_growth(const YAML::Node& fullConfig);
+		bool initialize_snap(const YAML::Node& fullConfig);
+
+		// Make sure the values are far enough apart:
+		bool getDoubleConfigDifferentValues(const std::vector<std::string> path);
+		bool getIntConfigDifferentValues(const std::vector<std::string> path);
+
+		// Get min/max values from a snap-config list:
+		bool getMinMaxDoubleFromConfig(double& outMin, double& outMax, const std::vector<std::string> path);
+		bool getMinMaxIntFromConfig(int& outMin, int& outMax, const std::vector<std::string> path);
+		
+		// Special case:
+		CGP::DYNAMIC_PROBABILITY getRandomDynamicProbabilityApplication();
+
+		// Get a random string from a list of strings:
+		std::string getConfigStringFromListOfStrings(const std::vector<std::string>& fullPath);
+
 	protected:
+		// Snap information:
+		YAML::Node m_fullConfig; // Keep the top config, store full paths to what we need.		
+		
+		// Growth information:
 		YAML::Node m_dendriteConfig;
 		YAML::Node m_axonConfig;
 		YAML::Node m_neuronConfig;
@@ -71,7 +100,11 @@ namespace JBrain
 		std::vector<CGP::CGP_INPUT> m_neuronInputs;
 		std::vector<CGP::CGP_OUTPUT> m_neuronOutputs;
 
+		// Stored observation processor
+		ObservationProcessor* m_observationProcessor;
+
 		std::string getNextBrainName();
+		ObservationProcessor* getObservationProcessor();
 		
 		// Get variables from our configuration YAML nodes:
 		float getConfigAsFloat(const YAML::Node& config, const std::string& name);
@@ -83,6 +116,26 @@ namespace JBrain
 		// syntactically easier to get the random values we need:
 		float getFloatFromConfigRange(const YAML::Node& config, const std::string& minName, const std::string& maxName);
 		int getIntFromConfigRange(const YAML::Node& config, const std::string& minName, const std::string& maxName);
+		
+
+		// Fill a vector with all of the mutatable parameters:
+		std::vector<namePathTuple> getAllDoubleMutationParameters_snap();
+		std::vector<namePathTuple> getAllUIntMutationParameters_snap();
+		std::vector<namePathTuple> getAllBoolMutationParameters_snap();
+		std::vector<namePathTuple> getAllStringListMutationParameters_snap();
+
+		// Mutate a brain based on a namePathTuple:
+		JBrain_Snap* getDoubleMutatedBrain_snap(const JBrain_Snap* parent, const namePathTuple& param);
+		JBrain_Snap* getUIntMutatedBrain_snap(const JBrain_Snap* parent, const namePathTuple& param);
+		JBrain_Snap* getBoolMutatedBrain_snap(const JBrain_Snap* parent, const namePathTuple& param);
+		JBrain_Snap* getStringMutatedBrain_snap(const JBrain_Snap* parent, const namePathTuple& param);
+
+		// Get config from Snap-brain YAML, which uses lists:
+		double getRandomListConfigAsDouble(const std::vector<std::string>& fullPath);
+		int getRandomListConfigAsInt(const std::vector<std::string>& fullPath);
+		bool getRandomConfigAsBool(const std::vector<std::string>& fullPath);
+		std::vector<std::string> getListOfStrings(std::vector<std::string> fullPath);
+		std::string getValueAsString(const std::vector<std::string>& fullPath, bool convertToLowercase=true);
 
 		// Given the available required and mutable functions, generate a valid
 		// random list of functions and their corresponding names:
@@ -105,17 +158,21 @@ namespace JBrain
 
 		static JBrainFactory* getInstance();
 		float getRandomFloat(const float& min, const float& max);
+		double getRandomDouble(const double& min, const double& max);
 		int getRandomInt(const int& min, const int& max);
 		bool getRandomBool();
 
 		~JBrainFactory();
 
 		bool initialize(const std::string& yamlFilename);
+		YAML::Node getExperimentConfig(); // Get the experiment configuration
 
 		JBrain* getRandomBrain();
+		JBrain_Snap* getRandomSnapBrain();
 
 		// Make one new brain for each mutatable parameter:
 		std::vector<JBrain*> getFullMutatedPopulation(JBrain* parent);
+		std::vector<JBrain_Snap*> getFullMutatedPopulation(JBrain_Snap* parent);
 	};
 
 } // End JBrain Namespace

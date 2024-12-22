@@ -2,6 +2,7 @@
 
 #include "JBrainCGPIndividual.h"
 #include "JBrainComponents.h"
+#include "ObservationProcessor.h"
 #include <string>
 #include <iostream>
 #include <fstream>
@@ -46,6 +47,298 @@ namespace JBrain
 		{}
 	};
 	
+	class JBrain_Snap
+	{
+		// to allow mutation-specific changes:
+		friend class JBrainFactory;
+
+	private:
+		// Calculate various chances:
+		double getChance_CorrectGotInput_IncreaseWeight();
+		double getChance_CorrectGotInput_CreateConnection();
+		double getChance_YesFired_UnusedInput_DecreaseWeight();
+		double getChance_YesFired_UnusedInput_BreakConnection();
+		double getChance_WrongGotInput_DecreaseWeight();
+		double getChance_WrongGotInput_BreakConnection();
+		double getChance_Step_CreateProcessingNeuron();
+		double getChance_Step_DestroyProcessingNeuron();
+		double getChance_Step_CreateInputNeuron();
+		double getChance_Step_DestroyInputNeuron();
+		double getChance_Run_CreateProcessingNeuron();
+		double getChance_Run_DestroyProcessingNeuron();
+		double getChance_Run_CreateInputNeuron();
+		double getChance_Run_DestroyInputNeuron();
+		double getChance_NoOut_IncreaseInputDendriteWeight();
+		double getChance_NoOut_AddProcessingNeuronDendrite();
+		double getChance_NoOut_IncreaseProcessingNeuronDendriteWeight();
+		double getChance_NoOut_AddOutputNeuronDendrite();
+		double getChance_NoOut_IncreaseOutputNeuronDendriteWeight();
+		double getChance_NoOut_CreateProcessingNeuron();
+
+		unsigned int getNeuronCount(); // Get a count of non-null neurons we have
+
+		std::string m_name;
+		std::string m_parentName;
+		std::vector<double> m_mostRecentBrainInputs;
+
+		double m_staticOverallProbability; // Passed in constructor.
+		double m_overallProbability; // Calculated using dynamic probability.
+		CGP::DYNAMIC_PROBABILITY m_dynamicProbabilityUsage;
+		double m_dynamicProbabilityMultiplier;
+		double m_mostRecentScorePercent;
+		unsigned int m_neuronAccumulateDuration;
+		bool m_neuronResetOnFiring;
+		bool m_neuronResetAfterOutput;
+		double m_neuronFireThreshold;
+		unsigned int m_neuronMaximumAge;
+		unsigned int m_brainProcessingStepsAllowed;
+
+		// Stored so we can pass them in a copy constructor:
+		unsigned int m_initialInputNeuronCount;
+		unsigned int m_initialProcessingNeuronCount;
+		unsigned int m_maximumProcessingNeuronCount;
+		unsigned int m_maximumInputNeuronsToInputRatio;
+
+		// Dendrite-specific variables:
+		double m_dendriteWeightChange;
+		double m_dendriteMinimumWeight;
+		double m_dendriteMaximumWeight;
+		double m_dendriteStartingWeight;
+		unsigned int m_dendriteMinCountPerNeuron;
+		unsigned int m_dendriteMaxCountPerNeuron;
+		unsigned int m_dendriteStartCountPerNeuron;
+
+		// Base neuron count is used to regulate the neuron-creation and neuron-destruction chances:
+		unsigned int m_baseProcessingNeuronCount;
+
+		// Environment-related values:
+		unsigned int m_observationSize;
+		unsigned int m_actionSize;
+		int m_correctOutputNeuron;  // The neuron we WANT to fire, based on the sage choice.
+
+		// Step-Events:
+		double m_stepCreateNeuronChance;
+		double m_stepCreateNeuron_BaseCountRatioMultiplier;
+		double m_stepCreateInputNeuronChance;
+		double m_stepCreateInputNeuron_ObservationSizeInputNeuronRatioMultiplier;
+		double m_stepDestroyNeuronChance;
+		double m_stepDestroyNeuron_CountBaseRatioMultiplier;
+		double m_stepDestroyInputNeuronChance;
+		double m_stepDestroyInputNeuron_InputNeuronObservationSizeRatioMultiplier;
+
+		// Weighting the processing neuron destruction:
+		bool m_destroyNeuron_FavorFewerConnections;
+		bool m_destroyNeuron_FavorYoungerNeurons;
+
+		// Run-Events:
+		double m_runCreateNeuronChance;
+		double m_runCreateNeuron_BaseCountRatioMultiplier;
+		double m_runCreateInputNeuronChance;
+		double m_runCreateInputNeuron_ObservationSizeInputNeuronRatioMultiplier;
+		double m_runDestroyNeuronChance;
+		double m_runDestroyNeuron_CountBaseRatioMultiplier;
+		double m_runDestroyInputNeuronChance;
+		double m_runDestroyInputNeuron_InputNeuronObservationSizeRatioMultiplier;
+
+		// Output-Positive Events:
+		double m_outputPositive_CascadeProbability;
+		double m_outputPositive_InSequence_IncreaseDendriteWeight;
+		double m_outputPositive_NoConnection_InSequence_CreateConnection;
+		double m_outputPositive_YesFire_UnusedInput_DecreaseWeight;
+		double m_outputPositive_YesFire_UnusedInput_BreakConnection;
+
+		// Output-Negative Events:
+		double m_outputNegative_CascadeProbability;
+		double m_outputNegative_InSequence_DecreaseDendriteWeight;
+		double m_outputNegative_InSequence_BreakConnection;
+
+		// No Output events:
+		double m_noOutput_IncreaseInputDendriteWeight;
+		double m_noOutput_AddProcessingNeuronDendrite;
+		double m_noOutput_IncreaseProcessingNeuronDendriteWeight;
+		double m_noOutput_AddOutputNeuronDendrite;
+		double m_noOutput_IncreaseOutputNeuronDendriteWeight;
+		double m_noOutput_CreateProcessingNeuron;
+
+		// A single observation processor pointer is held by all brains. The factory allocates it for us:
+		ObservationProcessor* m_observationProcessor;
+
+		// Easy function to check if an event occured:
+		bool getEventHappened(double probability);
+
+		// Get a count of how much each input is used:
+		std::vector<unsigned int> getUsedInputsCount();
+
+		// Get a count of how much the output of each neuron is used:
+		std::vector<unsigned int> getOutputCountVector(const std::vector<JNeuron_Snap*> checkVec);
+
+		// Create all of our initial neurons:
+		void createAllStartingNeurons(const unsigned int& inputCount, const unsigned int& processingNeurons);
+
+		// Sanity check and initial neuron creator:
+		void ensureAllInputsUsed(); // Create input neurons until all of the inputs are used at least once.
+		bool getInsideMaximumInputNeuronToInputsRatio();
+		bool getInsideMaximumProcessingNeuronsCount();
+
+		// Random events:
+		void handleStepEvents();
+		void handleEndOfRunEvents();
+		void handleNoOutputEvents();
+
+		// Implementation of events:
+		void doCreateProcessingNeuron();
+		void doDestroyProcessingNeuron();
+		void doCreateInputNeuron();
+		void doDestroyInputNeuron();
+		void doCreateOutputNeuron();
+		void doDecreaseDendriteWeight(const unsigned int& neuronNumber, const unsigned int& inputNeuronNumber);
+		void doDropDendriteConnection(const unsigned int& neuronNumber, const unsigned int& inputNeuronNumber);
+
+		// Events that only occur when the brain fails to produce output:
+		void doAddOutputNeuronDendrite(JNeuron_Snap* outputNeuron);
+		void doAddProcessingNeuronDendrite(JNeuron_Snap* procNeuron);
+
+		// Recursive functions that cascade through contributing neurons:
+		void handleCorrectOutputNeuronGotInputEvent(const unsigned int& neuron, const unsigned int& stepNumber,
+			double increaseWeightChance = -1.0, double createConnectionChance = -1.0);
+		void handleWrongOutputNeuronGotInputEvent(const unsigned int& neuron, const unsigned int& stepNumber,
+			double decreaseWeightChance = -1.0, double breakConnectionChance = -1.0);
+		void handleCorrectOutputNeuronFiredEvent(const unsigned int& neuron, const unsigned int& stepNumber);
+
+		// Non-recursive special-casing for input neurons:
+		void doHandleInputNeuronIncreaseWeights(const unsigned int& neuron);
+		void doHandleInputNeuronCreateConnection(const unsigned int& neuron);
+		void doHandleInputNeuronDecreaseWeights(const unsigned int& neuron);
+		void doHandleInputNeuronBreakConnection(const unsigned int& neuron);
+
+		// Get lists of neurons:
+		std::vector<JNeuron_Snap*> getAllNeuronsFiredOnStep(const unsigned int& stepNumber);
+
+		// This vector holds all neurons, in order and will store nullptrs when neurons are deleted.
+		// This is to make for easy access by ensuring that m_allNeurons[X] is always neuron number X.
+		std::vector<JNeuron_Snap*> m_allNeurons;
+		std::vector<JNeuron_Snap*> m_inputNeurons;
+		std::vector<JNeuron_Snap*> m_processingNeurons; // Need to be kept in order of outputs
+		std::vector<JNeuron_Snap*> m_outputNeurons;
+
+		// Remove all references to this neuron, then delete it. Remove it from the neuron storage
+		// vectors except for m_allNeurons which will store a nullptr in its place.
+		void deleteNeuron(unsigned int neuronNumber);
+
+		// Check if a given neuron should fire or not. If it does, set this step number in the fire steps.
+		bool setIfInputNeuronFired(const unsigned int& neuronNumber, const int& currentStepNumber);
+		bool setIfNonInputNeuronFired(const unsigned int& neuronNumber, const int& currentStepNumber,
+																	const unsigned int& minAccumulateStep, const unsigned int& maxAccumulateStep);
+
+
+		std::ofstream* m_outputCSV;
+		unsigned int m_correctNeuronFiredCount;
+		unsigned int m_wrongNeuronFiredCount;
+		unsigned int m_brainOutputZeroFiredCount;
+		unsigned int m_brainOutputOneFiredCount;
+		unsigned int m_inputNeuronFiredCount;
+		unsigned int m_processingNeuronFiredCount;
+		unsigned int m_outputNeuronFiredCount;
+		unsigned int m_inputNeuronCreatedCount;
+		unsigned int m_inputNeuronDestroyedCount;
+		unsigned int m_processingNeuronCreatedCount;
+		unsigned int m_processingNeuronDestroyedCount;
+		unsigned int m_correctOutNeuGotInputCalledCount; // Only non-recursive calls.
+		unsigned int m_wrongOutNeuGotInputCalledCount;  // Only non-recursive calls.
+		unsigned int m_noOutputHappenedCount;
+		// End logging
+
+	public:
+		~JBrain_Snap();
+		JBrain_Snap(
+			const std::string& name,
+			const std::string& parentName,
+			const double& overallProbability,
+			const CGP::DYNAMIC_PROBABILITY& dynamicProbabilityUsage,
+			const double& dynamicProbabilityMultiplier,
+			const unsigned int& neuronAccumulateDuration,
+			const bool& neuronResetOnFiring,
+			const bool& neuronResetAfterOutput,
+			const double& neuronFireThreshold,
+			const unsigned int& neuronMaximumAge,
+			const unsigned int& brainProcessingStepsAllowed,
+			const double& dendriteWeightChange,
+			const double& dendriteMinimumWeight,
+			const double& dendriteMaximumWeight,
+			const double& dendriteStartingWeight,
+			const unsigned int& dendriteMinCountPerNeuron,
+			const unsigned int& dendriteMaxCountPerNeuron,
+			const unsigned int& dendriteStartCountPerNeuron,
+			const unsigned int& baseProcessingNeuronCount,
+			const unsigned int& actionSize,
+			const unsigned int& initialInputNeuronCount,
+			const unsigned int& initialProcessingNeuronCount,
+			const unsigned int& maximumProcessingNeuronCount,
+			const unsigned int& maximumInputNeuronToInputsRatio,
+			const double& stepCreateNeuronChance,
+			const double& stepCreateNeuron_BaseCountRatioMultiplier,
+			const double& stepCreateInputNeuronChance,
+			const double& stepCreateInputNeuron_ObservationSizeInputNeuronRatioMultiplier,
+			const double& stepDestroyNeuronChance,
+			const double& stepDestroyNeuron_CountBaseRatioMultiplier,
+			const double& stepDestroyInputNeuronChance,
+			const double& stepDestroyInputNeuron_InputNeuronObservationSizeRatioMultiplier,
+			const bool& destroyNeuron_FavorFewerConnections,
+			const bool& destroyNeuron_FavorYoungerNeurons,
+			const double& runCreateNeuronChance,
+			const double& runCreateNeuron_BaseCountRatioMultiplier,
+			const double& runCreateInputNeuronChance,
+			const double& runCreateInputNeuron_ObservationSizeInputNeuronRatioMultiplier,
+			const double& runDestroyNeuronChance,
+			const double& runDestroyNeuron_CountBaseRatioMultiplier,
+			const double& runDestroyInputNeuronChance,
+			const double& runDestroyInputNeuron_InputNeuronObservationSizeRatioMultiplier,
+			const double& outputPositive_CascadeProbability,
+			const double& outputPositive_InSequence_IncreaseDendriteWeight,
+			const double& outputPositive_NoConnection_InSequence_CreateConnection,
+			const double& outputPositive_YesFire_UnusedInput_DecreaseWeight,
+			const double& outputPositive_YesFire_UnusedInput_BreakConnection,
+			const double& outputNegative_CascadeProbability,
+			const double& outputNegative_InSequence_DecreaseDendriteWeight,
+			const double& outputNegative_InSequence_BreakConnection,
+			const double& noOutput_IncreaseInputDendriteWeight,
+			const double& noOutput_AddProcessingNeuronDendrite,
+			const double& noOutput_IncreaseProcessingNeuronDendriteWeight,
+			const double& noOutput_AddOutputNeuronDendrite,
+			const double& noOutput_IncreaseOutputNeuronDendriteWeight,
+			const double& noOutput_CreateProcessingNeuron,
+			ObservationProcessor* observationProcessor);
+
+		std::vector<double> processInput(const std::vector<double>& inputs, int sageChoice);
+		void getFullTrialStatistics(unsigned int& noOutputEvents, unsigned int& goodOutputs, unsigned int& badOutputs,
+			unsigned int& procNeuronCreated, unsigned int& procNeuronDestroyed,
+			unsigned int& inputNeuronCreated, unsigned int& inputNeuronDestroyed);
+		void processEndOfTrial(double reward, const double& minReward, double maxReward); // Indicate that was the last step in the trial and let the brain respond.
+		bool runProcessingSteps(std::vector<double>& brainOutputs);
+		std::vector<double> readBrainOutput(const unsigned int& stepNumber);
+		bool fireAllProcessingAndOutputNeurons(const unsigned int& stepNumber); // True if an output neuron fired.
+
+		void resetAllNeuronFires();
+
+		// Logging information:
+		void initializeCSVOutputFile(std::string dataDirectory);
+		void writeLineToCSVOutputFile(const double& score);
+		void closeCSVOutputFile();
+		void resetAllLoggingValues();
+		void writeSelfToJson(json& j);
+
+		// Used in mutating brains:
+		JBrain_Snap(const JBrain_Snap& other);
+		std::string getName() { return m_name; }
+		std::string getParentName() { return m_parentName;}
+		bool setValueByName(const std::string& name, const double& value);
+		bool setValueByName(const std::string& name, const bool& value, const bool& flipBool = true);
+		bool setValueByName(const std::string& name, const unsigned int& value);
+		bool setValueByName(const std::string& name, std::string value);
+		void calculateOverallProbability();
+	};
+
+// This JBrain class assumes a growth paradigm:
 	class JBrain
 	{
 		// To allow mutation-specific changes:
@@ -53,7 +346,7 @@ namespace JBrain
 
 	private:
 		// Give each brain a name for debugging purposes:
-		std::string m_name;
+	  std::string m_name;
 		std::string m_parentName;
 
 		// Environment action and observation sizes. Eventually, this
@@ -396,7 +689,7 @@ namespace JBrain
 		// configurable in the yaml, but for the sake of speed, they
 		// will be hard coded for now:
 		bool initializeCSVOutputFile(std::string dataDirectory);
-		void writeLineToCSVOutputFile(const float& score);
+		void writeLineToCSVOutputFile(const float& score);		
 		void closeCSVOutputFile();
 
 		// If the size of the brain changed, some things may no longer make

@@ -13,7 +13,8 @@ extern unsigned int DEBUG_LEVEL;
 namespace JBrain
 {
 	const float JBrainFactory::MIN_FLOAT_MUTATE_DIFF = 0.01f;
-
+	const double JBrainFactory::MIN_DOUBLE_MUTATE_DIFF = 0.001;
+	
 	JBrainFactory* JBrainFactory::getInstance()
 	{
 		// Not built to handle the potential of multiple threads:
@@ -22,6 +23,7 @@ namespace JBrain
 	}
 
 	JBrainFactory::JBrainFactory() :
+		m_fullConfig(YAML::Null),	  
 		m_dendriteConfig(YAML::Null),
 		m_axonConfig(YAML::Null),
 		m_neuronConfig(YAML::Null),
@@ -31,16 +33,387 @@ namespace JBrain
 		m_initialized(false),
 		m_currentBrainNumber(1),
 		m_requiredFunctions(),
-		m_mutableFunctions()
+		m_mutableFunctions(),
+		m_observationProcessor(nullptr)
 	{}
 
-	JBrainFactory::~JBrainFactory() {}
+	JBrainFactory::~JBrainFactory()
+	{
+		if (m_observationProcessor != nullptr)
+		{
+			delete m_observationProcessor;
+			m_observationProcessor = nullptr;
+		}	
+	}
 
 	bool JBrainFactory::initialize(const std::string& yamlFilename)
 	{
 		// Load the full yaml:
 		YAML::Node fullConfig = YAML::LoadFile(yamlFilename);
 
+		// Run a different initialize depending on the paradigm:
+		std::string paradigm = getConfigAsString(fullConfig, "BrainParadigm", true);
+
+		if (paradigm == "growth")
+			return initialize_growth(fullConfig);
+		else if (paradigm == "snap")
+			return initialize_snap(fullConfig);
+		else
+		{
+			std::cout << "Unrecognized paradigm: " << paradigm << std::endl;
+			return false;
+		}
+	}
+
+	bool JBrainFactory::initialize_snap(const YAML::Node& fullConfig)
+	{
+		bool goodConfig = false;
+
+		// Just check that each section exists. The library doesn't need to be fool-proof
+		// with only a single user:
+		if (fullConfig["StepEvents"] && fullConfig["OutputEvents"] && fullConfig["RunEvents"])
+			goodConfig = true;
+
+		m_fullConfig = fullConfig;		
+		m_initialized = true;
+
+		getObservationProcessor();
+
+		return goodConfig;
+	}
+
+	YAML::Node JBrainFactory::getExperimentConfig()
+	{
+		if (m_fullConfig.IsNull())
+			return YAML::Load("null");
+		else
+			return m_fullConfig["Experiment"];
+	}
+
+	std::vector<namePathTuple> JBrainFactory::getAllDoubleMutationParameters_snap()
+	{
+		// Only create it once:
+		static std::vector<namePathTuple> retVal{
+			namePathTuple("OverallProbability", { "OverallProbability" }),
+			namePathTuple("NeuronFireThreshold", { "NeuronFireThreshold" }),
+			namePathTuple("DendriteWeightChange", { "DendriteWeightChange" }),
+		  namePathTuple("DendriteMinimumWeight", { "MinimumDendriteWeight" }),
+		  namePathTuple("DendriteMaximumWeight", { "MaximumDendriteWeight" }),
+		  namePathTuple("DendriteStartingWeight", { "DendriteStartingWeight" }),
+		  namePathTuple("StepCreateNeuronChance", { "StepEvents", "CreateProcessingNeuron", "StartingChance"}),
+		  namePathTuple("StepCreateNeuron_BaseCountRatioMultiplier", { "StepEvents", "CreateProcessingNeuron", "BaseOverCountRatioMultiplier"}),
+		  namePathTuple("StepCreateInputNeuronChance", { "StepEvents", "CreateInputNeuron", "StartingChance"}),
+		  namePathTuple("StepCreateInputNeuron_ObservationSizeInputNeuronRatioMultiplier",
+			  { "StepEvents", "CreateInputNeuron", "ObservationSizeOverInputNeuronCountMultiplier"}),
+			namePathTuple("StepDestroyNeuronChance", { "StepEvents", "DestroyProcessingNeuron", "StartingChance"}),
+			namePathTuple("StepDestroyNeuron_CountBaseRatioMultiplier",
+				{ "StepEvents", "DestroyProcessingNeuron", "CountOverBaseRatioMultiplier"}),
+			namePathTuple("StepDestroyInputNeuronChance", { "StepEvents", "DestroyInputNeuron", "StartingChance"}),
+			namePathTuple("StepDestroyInputNeuron_InputNeuronObservationSizeRatioMultiplier",
+				{ "StepEvents", "DestroyInputNeuron", "InputNeuronCountOverObservationSizeMultiplier"}),
+			namePathTuple("RunCreateNeuronChance", { "RunEvents", "CreateProcessingNeuron", "StartingChance"}),
+			namePathTuple("RunCreateNeuron_BaseCountRatioMultiplier",
+				{ "RunEvents", "CreateProcessingNeuron", "BaseOverCountRatioMultiplier"}),
+			namePathTuple("RunCreateInputNeuronChance", { "RunEvents", "CreateInputNeuron", "StartingChance"}),
+			namePathTuple("RunCreateInputNeuron_ObservationSizeInputNeuronRatioMultiplier",
+				{ "RunEvents", "CreateInputNeuron", "ObservationSizeOverInputNeuronCountMultiplier"}),
+			namePathTuple("RunDestroyNeuronChance", { "RunEvents", "DestroyProcessingNeuron", "StartingChance"}),
+			namePathTuple("RunDestroyNeuron_CountBaseRatioMultiplier",
+				{ "RunEvents", "DestroyProcessingNeuron", "CountOverBaseRatioMultiplier"}),
+			namePathTuple("RunDestroyInputNeuronChance", { "RunEvents", "DestroyInputNeuron", "StartingChance"}),
+			namePathTuple("RunDestroyInputNeuron_InputNeuronObservationSizeRatioMultiplier",
+				{ "RunEvents", "DestroyInputNeuron", "InputNeuronCountOverObservationSizeMultiplier"}),
+			namePathTuple("OutputPositive_CascadeProbability",
+				{ "OutputEvents", "OutputPositive", "CascadeProbability"}),
+			namePathTuple("OutputPositive_InSequence_IncreaseDendriteWeight",
+				{ "OutputEvents", "OutputPositive", "FiredInSequence_IncreaseDendriteWeightFromInput"}),
+			namePathTuple("OutputPositive_NoConnection_InSequence_CreateConnection",
+				{ "OutputEvents", "OutputPositive", "NoConnectionButFiredInSequence_CreateConnection"}),
+			namePathTuple("OutputPositive_YesFire_UnusedInput_DecreaseWeight",
+				{ "OutputEvents", "OutputPositive", "YesFire_UnusedInput_DecreaseWeight"}),
+			namePathTuple("OutputPositive_YesFire_UnusedInput_BreakConnection",
+				{ "OutputEvents", "OutputPositive",  "YesFire_UnusedInput_BreakConnection"}),
+			namePathTuple("OutputNegative_CascadeProbability",
+				{ "OutputEvents", "OutputNegative", "CascadeProbability"}),
+			namePathTuple("OutputNegative_InSequence_DecreaseDendriteWeight",
+				{ "OutputEvents", "OutputNegative", "FiredInSequence_DecreaseDendriteWeightFromInput"}),
+			namePathTuple("OutputNegative_InSequence_BreakConnection",
+				{ "OutputEvents", "OutputNegative", "FiredInSequence_BreakConnection"}),
+			namePathTuple("NoOutput_IncreaseInputDendriteWeight",
+				{ "NoOutputEvents", "IncreaseInputDendriteWeight" }),
+			namePathTuple("NoOutput_AddProcessingNeuronDendrite",
+				{ "NoOutputEvents", "AddProcessingNeuronDendrite" }),
+			namePathTuple("NoOutput_IncreaseProcessingNeuronDendriteWeight",
+				{ "NoOutputEvents", "IncreaseProcessingNeuronDendriteWeight" }),
+			namePathTuple("NoOutput_AddOutputNeuronDendrite", { "NoOutputEvents", "AddOutputNeuronDendrite" }),
+			namePathTuple("NoOutput_IncreaseOutputNeuronDendriteWeight", { "NoOutputEvents", "IncreaseOutputNeuronDendriteWeight" }),
+			namePathTuple("NoOutput_CreateProcessingNeuron", { "NoOutputEvents", "CreateProcessingNeuron" }) };
+		return retVal;
+	}
+
+	std::vector<namePathTuple> JBrainFactory::getAllUIntMutationParameters_snap()
+	{
+		static std::vector<namePathTuple> retVal{
+			namePathTuple("NeuronAccumulationDuration", { "NeuronAccumulateDuration" }),
+			namePathTuple("BrainProcessingStepsAllowed", { "ProcessingStepsAllowed" }),
+			namePathTuple("InitialInputNeuronCount", { "StartingInputNeuronCount" }),
+			namePathTuple("InitialProcessingNeuronCount", { "StartingProcessingNeuronCount" }),
+			namePathTuple("DendriteMinCountPerNeuron", { "MinimumDendritesPerNeuron" }),
+			namePathTuple("DendriteMaxCountPerNeuron", { "MaximumDendritesPerNeuron" }),
+			namePathTuple("DendriteStartCountPerNeuron", { "StartingDendritesPerNeuron" }),
+			namePathTuple("BaseProcessingNeuronCount", { "BaseProcessingNeuronCount" }),
+			// namePathTuple("ObservationSize", { "" }), // Shouldn't be mutated.
+			// namePathTuple("ActionSize", { "" }) // Shouldn't be mutated.
+		};
+		return retVal;
+	}
+
+	std::vector<namePathTuple> JBrainFactory::getAllBoolMutationParameters_snap()
+	{
+		static std::vector<namePathTuple> retVal{
+			namePathTuple("NeuronResetOnFiring", { "NeuronResetInputOnFiring" }),		
+			namePathTuple("NeuronResetAfterOutput", { "NeuronFiresResetAfterOutput" }),		
+			namePathTuple("DestroyNeuron_FavorFewerConnections", 
+				{ "WeightDestroyProcessingNeuron", "FavorNeuronsWithFewerConnections" }),
+			namePathTuple("DestroyNeuron_FavorYoungerNeurons",
+				{ "WeightDestroyProcessingNeuron", "FavorYoungerNeurons" })			
+		};
+		return retVal;
+	}
+
+	std::vector<namePathTuple> JBrainFactory::getAllStringListMutationParameters_snap()
+	{
+		std::vector<namePathTuple> retVal{};
+
+		retVal.push_back(namePathTuple("DynamicProbabilityUsage", { "DynamicProbabilityApplication" }));
+
+		return retVal;
+	}
+
+	double JBrainFactory::getRandomListConfigAsDouble(const std::vector<std::string>& fullPath)
+	{
+		double minVal, maxVal;
+		double retVal = -1.0;
+
+		if (!getMinMaxDoubleFromConfig(minVal, maxVal, fullPath))
+		{
+			std::cout << "Failed to retrieve value as double: ";
+			for (const auto& pathPart : fullPath)
+				std::cout << pathPart << " ";
+			std::cout << std::endl;
+			return retVal;
+		}
+
+		// Got the min and max values, choose a random variable between them:
+		return getRandomDouble(minVal, maxVal);
+	}
+
+	int JBrainFactory::getRandomListConfigAsInt(const std::vector<std::string>& fullPath)
+	{
+		int minVal, maxVal;
+		int retVal = -1;
+
+		if (!getMinMaxIntFromConfig(minVal, maxVal, fullPath))
+		{
+			std::cout << "Failed to retrieve value as int: ";
+			for (const auto& pathPart : fullPath)
+				std::cout << pathPart << " ";
+			std::cout << std::endl;
+			return retVal;
+		}
+
+		// Got the min and max values, choose a random variable between them:
+		return getRandomInt(minVal, maxVal);
+	}
+
+	bool JBrainFactory::getRandomConfigAsBool(const std::vector<std::string>& fullPath)
+	{
+		std::string boolString = getValueAsString(fullPath);
+		bool retBool = true;		
+		if (boolString == "mutable")
+			retBool = getRandomBool();
+		else if (boolString == "false")
+			retBool = false;
+		// else
+		//    retBool remains true;
+
+		return retBool;
+	}
+
+	CGP::DYNAMIC_PROBABILITY JBrainFactory::getRandomDynamicProbabilityApplication()
+	{
+		std::string dynName = getConfigStringFromListOfStrings({ "DynamicProbabilityApplication" });
+		return CGP::StringToDynamicProbability(dynName);
+	}
+
+	std::string JBrainFactory::getConfigStringFromListOfStrings(const std::vector<std::string>& fullPath)
+	{
+		// Allocate random devices only once:
+		static std::mt19937_64 gen(std::random_device{}());
+		
+		bool foundFullPath = true;
+		std::string retVal = "ERROR";
+		
+		// This copy-in, copy-out functionality makes this class not thread safe:
+		YAML::Node original = YAML::Clone(m_fullConfig);
+		YAML::Node nodeToCheck = m_fullConfig;
+
+		// Move through sub nodes:
+		for (auto configName : fullPath)
+		{
+			if (!nodeToCheck[configName])
+			{
+				foundFullPath = false;
+				break;
+			}
+			nodeToCheck = nodeToCheck[configName];
+		}
+
+		if (foundFullPath)
+		{
+			std::vector<std::string> toSearch = nodeToCheck.as<std::vector<std::string> >();
+			
+			// Choose one randomly:
+			std::uniform_int_distribution<> dist(0, static_cast<int>(toSearch.size()) - 1);
+			unsigned int idx = static_cast<unsigned int>(dist(gen));
+			retVal = toSearch[idx];			
+		}
+
+		// Put the original back in place and return success:
+		m_fullConfig = original;
+		return retVal;
+	}
+
+	std::string JBrainFactory::getValueAsString(const std::vector<std::string>& fullPath,
+		bool convertToLowercase)
+	{
+		std::string retVal = "ERROR";
+		bool foundFullPath = true;
+
+		// This copy-in, copy-out functionality makes this class not thread safe:
+		YAML::Node original = YAML::Clone(m_fullConfig);
+		YAML::Node nodeToCheck = m_fullConfig;
+
+		// Move through sub nodes:
+		for (auto configName : fullPath)
+		{
+			if (!nodeToCheck[configName])
+			{
+				foundFullPath = false;
+				break;
+			}
+			nodeToCheck = nodeToCheck[configName];
+		}
+
+		if (foundFullPath)
+		{
+			retVal = nodeToCheck.as<std::string>();			
+		}
+
+		if (convertToLowercase)
+		{
+			std::transform(retVal.begin(), retVal.end(), retVal.begin(),
+				[](unsigned char c) { return std::tolower(c); });
+		}
+
+		// Put the original back in place and return success:
+		m_fullConfig = original;
+		return retVal;
+	}
+
+	bool JBrainFactory::getDoubleConfigDifferentValues(const std::vector<std::string> path)
+	{
+		double minVal, maxVal;
+		bool retVal = false;
+
+		if (!getMinMaxDoubleFromConfig(minVal, maxVal, path))
+		{
+			if (maxVal - minVal >= MIN_DOUBLE_MUTATE_DIFF)
+				retVal = true;
+		}
+
+		return retVal;
+	}
+
+	bool JBrainFactory::getIntConfigDifferentValues(const std::vector<std::string> path)
+	{
+		int minVal, maxVal;
+		bool retVal = false;
+
+		if (!getMinMaxIntFromConfig(minVal, maxVal, path))
+		{
+			if (maxVal - minVal >= MIN_INT_MUTATE_DIFF)
+				retVal = true;
+		}
+
+		return retVal;
+	}
+
+	bool JBrainFactory::getMinMaxDoubleFromConfig(double& outMin, double& outMax, const std::vector<std::string> subConfigs)
+	{
+		bool foundFullPath = true;
+		outMin = -1.0;
+		outMax = -1.0;
+		// This copy-in, copy-out functionality makes this class not thread safe:
+		YAML::Node original = YAML::Clone(m_fullConfig);
+		YAML::Node nodeToCheck = m_fullConfig;
+
+		// Move through sub nodes:
+		for (auto configName : subConfigs)
+		{
+			if (!nodeToCheck[configName])
+			{
+				foundFullPath = false;
+				break;
+			}
+			nodeToCheck = nodeToCheck[configName];
+		}
+
+		if (foundFullPath)
+		{
+			// Only 2 values, no need for loop:			
+			outMin = nodeToCheck[0].as<double>();			
+			outMax = nodeToCheck[1].as<double>();
+		}
+
+		// Put the original back in place and return success:
+		m_fullConfig = original;
+		return foundFullPath;
+	}
+
+	bool JBrainFactory::getMinMaxIntFromConfig(int& outMin, int& outMax, const std::vector<std::string> subConfigs)
+	{
+		bool foundFullPath = true;
+		outMin = -1;
+		outMax = -1;
+		YAML::Node original = YAML::Clone(m_fullConfig);
+		YAML::Node nodeToCheck = m_fullConfig;
+
+		// Move through sub nodes:
+		for (auto configName : subConfigs)
+		{
+			if (!nodeToCheck[configName])
+			{
+				foundFullPath = false;
+				break;
+			}
+			nodeToCheck = nodeToCheck[configName];
+		}
+
+		if (foundFullPath)
+		{
+			// Only 2 values, no need for loop:			
+			outMin = nodeToCheck[0].as<int>();
+			outMax = nodeToCheck[1].as<int>();
+		}
+
+		// Put the original back in place and return success:
+		m_fullConfig = original;
+		return foundFullPath;
+	}
+
+	bool JBrainFactory::initialize_growth(const YAML::Node& fullConfig)
+	{
 		bool goodConfig = true;		
 		
 		// Check each individual section:
@@ -52,7 +425,7 @@ namespace JBrain
 		}
 		else
 		{
-			std::cout << yamlFilename << " must include a 'Dendrite' section." << std::endl;
+			std::cout << "YAML configuration must include a 'Dendrite' section." << std::endl;
 			goodConfig = false;
 		}
 
@@ -61,7 +434,7 @@ namespace JBrain
 			goodConfig = checkAxonConfig(fullConfig["Axon"]) && goodConfig;
 		else
 		{
-			std::cout << yamlFilename << " must include an 'Axon' section" << std::endl;
+			std::cout << "YAML configuration must include an 'Axon' section" << std::endl;
 			goodConfig = false;
 		}
 
@@ -70,7 +443,7 @@ namespace JBrain
 			goodConfig = checkNeuronConfig(fullConfig["Neuron"]) && goodConfig;
 		else
 		{
-			std::cout << yamlFilename << " must include an 'Neuron' section" << std::endl;
+			std::cout << "YAML configuration must include an 'Neuron' section" << std::endl;
 			goodConfig = false;
 		}
 
@@ -79,7 +452,7 @@ namespace JBrain
 			goodConfig = checkSleepConfig(fullConfig["Sleep"]) && goodConfig;
 		else
 		{
-			std::cout << yamlFilename << " must include a 'Sleep' section" << std::endl;
+			std::cout << "YAML configuration must include a 'Sleep' section" << std::endl;
 			goodConfig = false;
 		}
 
@@ -88,7 +461,7 @@ namespace JBrain
 			goodConfig = checkBrainConfig(fullConfig["Brain"]) && goodConfig;
 		else
 		{
-			std::cout << yamlFilename << " must include a 'Brain' section" << std::endl;
+			std::cout << "YAML configuration must include a 'Brain' section" << std::endl;
 			goodConfig = false;
 		}
 		
@@ -97,7 +470,7 @@ namespace JBrain
 			goodConfig = checkEquationsConfig(fullConfig["Equation"]) && goodConfig;
 		else
 		{
-			std::cout << yamlFilename << " must include an 'Equation' section" << std::endl;
+			std::cout << "YAML configuration must include an 'Equation' section" << std::endl;
 			goodConfig = false;
 		}
 
@@ -472,6 +845,23 @@ namespace JBrain
 		return static_cast<float>(dist(e2));
 	}
 
+	double JBrainFactory::getRandomDouble(const double& min, const double& max)
+	{
+		// Random device and distribution don't need to be
+		// recreated every time:
+		static std::random_device rd;
+		static std::mt19937_64 e2(rd());
+
+		// We always want uniform distribution. The odd next-after
+		// syntax around max is used to make sure that max is one
+		// of the values that can be returned. The distribution's possible
+		// return values are in the range [a, b):
+		std::uniform_real_distribution<> dist(min,
+			std::nextafter(max, std::numeric_limits<double>::max()));
+
+		return dist(e2);
+	}
+
 	float JBrainFactory::getFloatFromConfigRange(const YAML::Node& config, const std::string& minName, const std::string& maxName)
 	{
 		return getRandomFloat(
@@ -503,7 +893,7 @@ namespace JBrain
 	int JBrainFactory::getRandomInt(const int& min, const int& max)
 	{
 		// Random device and distribution don't need to be
-	    // recreated every time:
+	  // recreated every time:
 		static std::random_device rd;
 		static std::mt19937 e2(rd());
 				
@@ -523,11 +913,107 @@ namespace JBrain
 		return bool(dist(e2) == 0);
 	}
 
+	ObservationProcessor* JBrainFactory::getObservationProcessor()
+	{
+		// If we don't have an observation processor yet, create it:
+		if (m_observationProcessor == nullptr)
+		{
+			CGP::INPUT_PREPROCESSING preProc = CGP::StringToInputPreprocessing(
+				getConfigAsString(m_fullConfig["InputProcessing"], "Type", false));
+			unsigned int obsSize = static_cast<unsigned int>(
+				getConfigAsInt(m_fullConfig["InputProcessing"], "ObservationSize"));
+			unsigned int buckets = static_cast<unsigned int>(
+				getConfigAsInt(m_fullConfig["InputProcessing"], "BucketsPerInput"));
+			std::vector<std::vector<double> > obsRanges;
+			for (auto innerList : m_fullConfig["InputProcessing"]["ObsRanges"])
+			{
+				// Should always be of length 2:
+				obsRanges.push_back(std::vector<double>{ innerList[0].as<double>(), innerList[1].as<double>() });
+			}
+
+			m_observationProcessor = new ObservationProcessor(preProc, obsSize, obsRanges, buckets);
+		}
+
+		return m_observationProcessor;
+	}
+
+	JBrain_Snap* JBrainFactory::getRandomSnapBrain()
+	{
+		if (!m_initialized)
+		{
+			std::cout << "Asking for a snap brain from uninitialized factory." << std::endl;
+			return nullptr;
+		}
+
+		ObservationProcessor* obsProc = getObservationProcessor();
+
+		JBrain_Snap* retVal = new JBrain_Snap(
+			getNextBrainName(), // name
+			std::string("JBrainFactory"), // parentName
+			getRandomListConfigAsDouble({ "OverallProbability" }), // overallProbability
+			getRandomDynamicProbabilityApplication(),  // dynamicProbabilityUsage
+			getRandomListConfigAsDouble({ "DynamicProbabilityMultiplier" }), // dynamicProbabilityMultiplier
+			static_cast<unsigned int>(getRandomListConfigAsInt({ "NeuronAccumulateDuration" })), // neuronAccumulateDuration
+			getRandomConfigAsBool({ "NeuronResetInputOnFiring" }), // neuronResetOnFiring
+			getRandomConfigAsBool({ "NeuronFiresResetAfterOutput" }), // neuronResetAfterOutput
+			getRandomListConfigAsDouble({ "NeuronFireThreshold" }), // neuronFireThreshold
+			static_cast<unsigned int>(getRandomListConfigAsInt({ "NeuronMaximumAge" })),
+			static_cast<unsigned int>(getRandomListConfigAsInt({ "ProcessingStepsAllowed" })), //brainProcessingStepsAllowed
+			getRandomListConfigAsDouble({ "DendriteWeightChange" }), // dendriteWeightChange
+			getRandomListConfigAsDouble({ "MinimumDendriteWeight" }), // dendriteMinimumWeight
+			getRandomListConfigAsDouble({ "MaximumDendriteWeight" }), // dendriteMaximumWeight
+			getRandomListConfigAsDouble({ "DendriteStartingWeight" }), // dendriteStartingWeight
+			static_cast<unsigned int>(getRandomListConfigAsInt({ "MinimumDendritesPerNeuron" })), // dendriteMinCountPerNeuron
+			static_cast<unsigned int>(getRandomListConfigAsInt({ "MaximumDendritesPerNeuron" })), // dendriteMaxCountPerNeuron
+			static_cast<unsigned int>(getRandomListConfigAsInt({ "StartingDendritesPerNeuron" })), // dendriteStartCountPerNeuron
+			static_cast<unsigned int>(getRandomListConfigAsInt({ "BaseProcessingNeuronCount" })), // baseProcessingNeuronCount
+			static_cast<unsigned int>(getRandomListConfigAsInt({ "EnvironmentDetails", "ActionSize" })), // actionSize,
+			static_cast<unsigned int>(getRandomListConfigAsInt({ "StartingInputNeuronCount" })), // initialInputNeuronCount
+			static_cast<unsigned int>(getRandomListConfigAsInt({ "StartingProcessingNeuronCount" })), // initialProcessingNeuronCount
+			static_cast<unsigned int>(getRandomListConfigAsInt({ "MaximumProcessingNeuronCount" })), // maximumProcessingNeuronCount
+			static_cast<unsigned int>(getRandomListConfigAsInt({ "MaximumInputNeuronToInputsRatio" })), // maximumInputNeuronToInputsRatio
+			getRandomListConfigAsDouble({ "StepEvents", "CreateProcessingNeuron", "StartingChance" }), //stepCreateNeuronChance,
+			getRandomListConfigAsDouble({ "StepEvents", "CreateProcessingNeuron", "BaseOverCountRatioMultiplier" }), //stepCreateNeuron_BaseCountRatioMultiplier,
+			getRandomListConfigAsDouble({ "StepEvents", "CreateInputNeuron", "StartingChance" }), //stepCreateInputNeuronChance,
+			getRandomListConfigAsDouble({ "StepEvents", "CreateInputNeuron", "ObservationSizeOverInputNeuronCountMultiplier" }), //stepCreateInputNeuron_ObservationSizeInputNeuronRatioMultiplier,
+			getRandomListConfigAsDouble({ "StepEvents", "DestroyProcessingNeuron", "StartingChance" }), //stepDestroyNeuronChance,
+			getRandomListConfigAsDouble({ "StepEvents", "DestroyProcessingNeuron", "CountOverBaseRatioMultiplier" }), //stepDestroyNeuron_CountBaseRatioMultiplier,
+			getRandomListConfigAsDouble({ "StepEvents", "DestroyInputNeuron", "StartingChance" }), //stepDestroyInputNeuronChance,
+			getRandomListConfigAsDouble({ "StepEvents", "DestroyInputNeuron", "InputNeuronCountOverObservationSizeMultiplier" }), //stepDestroyInputNeuron_InputNeuronObservationSizeRatioMultiplier
+			getRandomConfigAsBool({ "WeightDestroyProcessingNeuron", "FavorNeuronsWithFewerConnections" }), //DestroyNeuron_FavorFewerConnections
+			getRandomConfigAsBool({ "WeightDestroyProcessingNeuron", "FavorYoungerNeurons" }), // DestroyNeuron_favorYoungerNeurons
+			getRandomListConfigAsDouble({ "RunEvents", "CreateProcessingNeuron", "StartingChance" }),  //runCreateNeuronChance,
+			getRandomListConfigAsDouble({ "RunEvents", "CreateProcessingNeuron", "BaseOverCountRatioMultiplier" }),  //runCreateNeuron_BaseCountRatioMultiplier,
+			getRandomListConfigAsDouble({ "RunEvents", "CreateInputNeuron", "StartingChance" }),  //runCreateInputNeuronChance,
+			getRandomListConfigAsDouble({ "RunEvents", "CreateInputNeuron", "ObservationSizeOverInputNeuronCountMultiplier" }),  //runCreateInputNeuron_ObservationSizeInputNeuronRatioMultiplier,
+			getRandomListConfigAsDouble({ "RunEvents", "DestroyProcessingNeuron", "StartingChance" }),  //runDestroyNeuronChance,
+			getRandomListConfigAsDouble({ "RunEvents", "DestroyProcessingNeuron", "CountOverBaseRatioMultiplier" }),  //runDestroyNeuron_CountBaseRatioMultiplier,
+			getRandomListConfigAsDouble({ "RunEvents", "DestroyInputNeuron", "StartingChance" }),  //runDestroyInputNeuronChance,
+			getRandomListConfigAsDouble({ "RunEvents", "DestroyInputNeuron", "InputNeuronCountOverObservationSizeMultiplier" }),  //runDestroyInputNeuron_InputNeuronObservationSizeRatioMultiplier,
+			getRandomListConfigAsDouble({ "OutputEvents", "OutputPositive", "CascadeProbability" }),  //outputPositive_CascadeProbability,
+			getRandomListConfigAsDouble({ "OutputEvents", "OutputPositive", "FiredInSequence_IncreaseDendriteWeightFromInput" }),  //outputPositive_InSequence_IncreaseDendriteWeight,
+			getRandomListConfigAsDouble({ "OutputEvents", "OutputPositive", "NoConnectionButFiredInSequence_CreateConnection" }),  //outputPositive_NoConnection_InSequence_CreateConnection,
+			getRandomListConfigAsDouble({ "OutputEvents", "OutputPositive", "YesFire_UnusedInput_DecreaseWeight" }),  //outputPositive_YesFire_UnusedInput_DecreaseWeight,
+			getRandomListConfigAsDouble({ "OutputEvents", "OutputPositive", "YesFire_UnusedInput_BreakConnection" }),  //outputPositive_YesFire_UnusedInput_BreakConnection,
+			getRandomListConfigAsDouble({ "OutputEvents", "OutputNegative", "CascadeProbability" }),  //outputNegative_CascadeProbability,
+			getRandomListConfigAsDouble({ "OutputEvents", "OutputNegative", "FiredInSequence_DecreaseDendriteWeightFromInput" }),  //outputNegative_InSequence_DecreaseDendriteWeight,
+			getRandomListConfigAsDouble({ "OutputEvents", "OutputNegative", "FiredInSequence_BreakConnection" }),  //outputNegative_InSequence_BreakConnection,
+			getRandomListConfigAsDouble({ "NoOutputEvents", "IncreaseInputDendriteWeight" }),  //NoOutput_IncreaseInputDendriteWeight,
+			getRandomListConfigAsDouble({ "NoOutputEvents", "AddProcessingNeuronDendrite" }),  //NoOutput_AddProcessingNeuronDendrite,
+			getRandomListConfigAsDouble({ "NoOutputEvents", "IncreaseProcessingNeuronDendriteWeight" }),  //NoOutput_IncreaseProcessingNeuronDendriteWeight,
+			getRandomListConfigAsDouble({ "NoOutputEvents", "AddOutputNeuronDendrite" }),  //NoOutput_AddOutputNeuronDendrite,
+			getRandomListConfigAsDouble({ "NoOutputEvents", "IncreaseOutputNeuronDendriteWeight" }),  //NoOutput_IncreaseOutputNeuronDendriteWeight,
+			getRandomListConfigAsDouble({ "NoOutputEvents", "CreateProcessingNeuron" }),  //NoOutput_CreateProcessingNeuron,
+			obsProc); // observation processor
+
+		return retVal;
+	}
+
 	JBrain* JBrainFactory::getRandomBrain()
 	{
 		if (!m_initialized)
 		{
-			std::cout << "Asking for a brain from uninitiaziled factory." << std::endl;
+			std::cout << "Asking for a brain from uninitialized factory." << std::endl;
 			return nullptr;
 		}		
 				
@@ -689,6 +1175,85 @@ namespace JBrain
 		return retVal;
 	}
 
+	std::vector<std::string> JBrainFactory::getListOfStrings(std::vector<std::string> fullPath)
+	{
+		// This copy-in, copy-out functionality makes this class not thread safe:
+		YAML::Node original = YAML::Clone(m_fullConfig);
+		YAML::Node nodeToCheck = m_fullConfig;
+
+		std::vector<std::string> retVal{};
+		bool foundFullPath = true;
+
+		// Move through sub nodes:
+		for (auto configName : fullPath)
+		{
+			if (!nodeToCheck[configName])
+			{
+				foundFullPath = false;
+				break;
+			}
+			nodeToCheck = nodeToCheck[configName];
+		}
+
+		if (foundFullPath)
+			retVal = nodeToCheck.as<std::vector<std::string> >();
+
+		m_fullConfig = original;
+		return retVal;
+	}
+
+	JBrain_Snap* JBrainFactory::getStringMutatedBrain_snap(const JBrain_Snap* parent, const namePathTuple& param)
+	{
+		std::vector<std::string> options = getListOfStrings(std::get<1>(param));
+		JBrain_Snap* retVal = nullptr;
+
+		// If the length of the list is long enough, choose randomly.
+		// This can result in no change in the brain in question.
+		if (options.size() >= MIN_STRING_LIST_LENGTH)
+		{
+			int idx = getRandomInt(0, static_cast<int>(options.size() - 1));
+			std::string mutVal = options[idx];
+			
+			retVal = new JBrain_Snap(*parent);
+			if (!retVal->setValueByName(std::get<0>(param), mutVal))
+			{
+				std::cout << "Failed to set string value by name: " << std::get<0>(param) << std::endl;
+				delete retVal;
+				retVal = nullptr;
+			}
+			else
+				retVal->setValueByName("Name", getNextBrainName());
+		}
+
+		return retVal;
+	}
+
+	JBrain_Snap* JBrainFactory::getDoubleMutatedBrain_snap(const JBrain_Snap* parent, const namePathTuple& param)
+	{
+		// Get the min and max values:
+		double minVal, maxVal;
+		getMinMaxDoubleFromConfig(minVal, maxVal, std::get<1>(param));
+		JBrain_Snap* retVal = nullptr;
+
+		// Mutate if there is a need:
+		if ((maxVal - minVal) > MIN_DOUBLE_MUTATE_DIFF)
+		{
+			double mutVal = getRandomDouble(minVal, maxVal);
+			retVal = new JBrain_Snap(*parent);
+
+			if (!retVal->setValueByName(std::get<0>(param), mutVal))
+			{
+				std::cout << "Failed to set double value by name: " << std::get<0>(param) << std::endl;
+				delete retVal;
+				retVal = nullptr;
+			}
+			else
+				retVal->setValueByName("Name", getNextBrainName());
+		}
+
+		return retVal;
+	}
+
 	JBrain* JBrainFactory::getMutatedBrain_int(JBrain* parent,
 		const YAML::Node& config, const std::string& configValueName, const std::string& brainValueName)
 	{
@@ -708,7 +1273,39 @@ namespace JBrain
 			int mutVal = getRandomInt(minVal, maxVal);
 
 			retVal = new JBrain(*parent);
-			retVal->setValueByName(brainValueName, mutVal);
+			if (!retVal->setValueByName(brainValueName, mutVal))
+			{
+				std::cout << "Failed to set value by name: " << brainValueName << std::endl;
+				delete retVal;
+				retVal = nullptr;
+			}
+		}
+
+		return retVal;
+	}
+
+	JBrain_Snap* JBrainFactory::getUIntMutatedBrain_snap(const JBrain_Snap* parent, const namePathTuple& param)
+	{
+		int minVal, maxVal;
+		getMinMaxIntFromConfig(minVal, maxVal, std::get<1>(param));
+		JBrain_Snap* retVal = nullptr;
+
+		// If there is room between the max and min, select a new random variable:
+		if ((maxVal - minVal) >= MIN_INT_MUTATE_DIFF)
+		{
+			// Occasionally, this may not modify the value:
+			int mutVal = getRandomInt(minVal, maxVal);
+			
+			// Make the new brain:
+			retVal = new JBrain_Snap(*parent);
+			if (!retVal->setValueByName(std::get<0>(param), static_cast<unsigned int>(mutVal)))
+			{
+				std::cout << "Failed to set UInt value by name: " << std::get<0>(param) << std::endl;
+				delete retVal;
+				retVal = nullptr;
+			}
+			else
+				retVal->setValueByName("Name", getNextBrainName());
 		}
 
 		return retVal;
@@ -732,6 +1329,78 @@ namespace JBrain
 		}
 
 		return retVal;
+	}
+
+	JBrain_Snap* JBrainFactory::getBoolMutatedBrain_snap(const JBrain_Snap* parent, const namePathTuple& param)
+	{
+		// If we can't mutate the brain, we give back null:
+		JBrain_Snap* retVal = nullptr;
+
+		std::string boolString = getValueAsString(std::get<1>(param), true);
+		if (boolString == "mutable")
+		{
+			// Variable is changeable, create a new brain and tell it to swap that value:
+			retVal = new JBrain_Snap(*parent);
+			if (!retVal->setValueByName(std::get<0>(param), true, true))
+			{
+				std::cout << "Failed to set bool value by name " << std::get<0>(param) << std::endl;
+			}
+			else
+				retVal->setValueByName("Name", getNextBrainName());
+		}			
+
+		return retVal;
+	}
+
+	std::vector<JBrain_Snap*> JBrainFactory::getFullMutatedPopulation(JBrain_Snap* parent)
+	{
+		// Vectors of parameters to try mutating on:
+		std::vector<namePathTuple> doubleParams = getAllDoubleMutationParameters_snap();
+		std::vector<namePathTuple> uIntParams = getAllUIntMutationParameters_snap();
+		std::vector<namePathTuple> boolParams = getAllBoolMutationParameters_snap();
+		std::vector<namePathTuple> stringListParams = getAllStringListMutationParameters_snap();
+		
+		// The full population we'll return:
+		std::vector<JBrain_Snap*> retPop;
+		JBrain_Snap* tempBrain;
+
+		// Loop over each parameter set:
+		for (auto npt : doubleParams)
+		{
+			tempBrain = getDoubleMutatedBrain_snap(parent, npt);
+			if (tempBrain != nullptr)
+				retPop.push_back(tempBrain);
+		}
+		
+		for (auto npt : uIntParams)
+		{
+			tempBrain = getUIntMutatedBrain_snap(parent, npt);
+			if (tempBrain != nullptr)
+				retPop.push_back(tempBrain);
+		}
+
+		for (auto npt : boolParams)
+		{
+			tempBrain = getBoolMutatedBrain_snap(parent, npt);
+			if (tempBrain != nullptr)
+				retPop.push_back(tempBrain);
+		}
+
+		for (auto npt : stringListParams)
+		{
+			tempBrain = getStringMutatedBrain_snap(parent, npt);
+			if (tempBrain != nullptr)
+				retPop.push_back(tempBrain);
+		}
+
+		// Don't let the parent try again, rather recreate the same brain from the parent's
+		// parameters and add it back to the population:
+		tempBrain = new JBrain_Snap(*parent);
+		delete parent;		
+		tempBrain->setValueByName("Name", getNextBrainName());
+		retPop.push_back(tempBrain);
+		
+		return retPop;
 	}
 
 	std::vector<JBrain*> JBrainFactory::getFullMutatedPopulation(JBrain* parent)
