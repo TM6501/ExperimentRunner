@@ -47,6 +47,13 @@ namespace JBrain
 		bool initialize_growth(const YAML::Node& fullConfig);
 		bool initialize_snap(const YAML::Node& fullConfig);
 
+		// Variables related to using static training data rather than interaction with an environment:
+		bool m_csvTrainingDataProvided;
+		std::vector<std::vector<double> > m_csvObservations;
+		std::vector<std::vector<double> > m_csvActions;
+		std::vector<double> m_observationMinimums;
+		std::vector<double> m_observationMaximums;
+
 		// Make sure the values are far enough apart:
 		bool getDoubleConfigDifferentValues(const std::vector<std::string> path);
 		bool getIntConfigDifferentValues(const std::vector<std::string> path);
@@ -55,11 +62,15 @@ namespace JBrain
 		bool getMinMaxDoubleFromConfig(double& outMin, double& outMax, const std::vector<std::string> path);
 		bool getMinMaxIntFromConfig(int& outMin, int& outMax, const std::vector<std::string> path);
 		
-		// Special case:
+		// Special cases:
 		CGP::DYNAMIC_PROBABILITY getRandomDynamicProbabilityApplication();
+		CGP::HDC_LEARN_MODE getRandomHDCLearnMode();
 
 		// Get a random string from a list of strings:
 		std::string getConfigStringFromListOfStrings(const std::vector<std::string>& fullPath);
+
+		// Get learning data from a CSV rather than interacting with an environment:
+		bool readTrainingCSV(std::string& filename, unsigned int& obsSize, unsigned int& actSize);
 
 	protected:
 		// Snap information:
@@ -136,6 +147,7 @@ namespace JBrain
 		bool getRandomConfigAsBool(const std::vector<std::string>& fullPath);
 		std::vector<std::string> getListOfStrings(std::vector<std::string> fullPath);
 		std::string getValueAsString(const std::vector<std::string>& fullPath, bool convertToLowercase=true);
+		int getValueAsInt(const std::vector<std::string>& fullPath);
 
 		// Given the available required and mutable functions, generate a valid
 		// random list of functions and their corresponding names:
@@ -161,6 +173,12 @@ namespace JBrain
 		double getRandomDouble(const double& min, const double& max);
 		int getRandomInt(const int& min, const int& max);
 		bool getRandomBool();
+		bool getHDCModeSet();
+		
+		// Trusting the requesters to not screw with our data:
+		bool getCSVTrainingDataProvided() { return m_csvTrainingDataProvided; }
+		std::vector<std::vector<double> >* getCSVObservations() { return &m_csvObservations; }
+		std::vector<std::vector<double> >* getCSVActions() { return &m_csvActions; }
 
 		~JBrainFactory();
 

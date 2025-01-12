@@ -1,6 +1,8 @@
 #include "pch.h"
 #include "JBrain.h"
 #include <random>
+#include <set>
+#include <cmath>
 
 #include <chrono>
 
@@ -37,6 +39,9 @@ namespace JBrain
 		const double& dendriteMinimumWeight,
 		const double& dendriteMaximumWeight,
 		const double& dendriteStartingWeight,
+		const double& dendriteWeightTickDownAmount,
+		const double& dendriteCorrectWeightChange,
+		const double& dendriteIncorrectWeightChange,
 		const unsigned int& dendriteMinCountPerNeuron,
 		const unsigned int& dendriteMaxCountPerNeuron,
 		const unsigned int& dendriteStartCountPerNeuron,
@@ -72,15 +77,22 @@ namespace JBrain
 		const double& outputNegative_CascadeProbability,
 		const double& outputNegative_InSequence_DecreaseDendriteWeight,
 		const double& outputNegative_InSequence_BreakConnection,
+		const double& outputNegative_CreatePureProcessingNeuron,
 		const double& noOutput_IncreaseInputDendriteWeight,
 		const double& noOutput_AddProcessingNeuronDendrite,
 		const double& noOutput_IncreaseProcessingNeuronDendriteWeight,
 		const double& noOutput_AddOutputNeuronDendrite,
 		const double& noOutput_IncreaseOutputNeuronDendriteWeight,
 		const double& noOutput_CreateProcessingNeuron,
+		const double& noOutput_CreatePureProcessingNeuron,
+		const bool& usePassthroughInputNeurons,
+		const bool& useHDCMode,
+		const unsigned int& hdcMinimumDeleteDistance,
+		const CGP::HDC_LEARN_MODE& hdcLearnMode,
 		ObservationProcessor* observationProcessor)
 		:
 	m_name(name),
+		m_parentName(parentName),
 		m_staticOverallProbability(overallProbability),
 		m_dynamicProbabilityUsage(dynamicProbabilityUsage),
 		m_dynamicProbabilityMultiplier(dynamicProbabilityMultiplier),
@@ -99,6 +111,9 @@ namespace JBrain
 		m_dendriteMinimumWeight(dendriteMinimumWeight),
 		m_dendriteMaximumWeight(dendriteMaximumWeight),
 		m_dendriteStartingWeight(dendriteStartingWeight),
+		m_dendriteWeightTickDownAmount(dendriteWeightTickDownAmount),
+		m_dendriteCorrectWeightChange(dendriteCorrectWeightChange),
+		m_dendriteIncorrectWeightChange(dendriteIncorrectWeightChange),
 		m_dendriteMinCountPerNeuron(dendriteMinCountPerNeuron),
 		m_dendriteMaxCountPerNeuron(dendriteMaxCountPerNeuron),
 		m_dendriteStartCountPerNeuron(dendriteStartCountPerNeuron),
@@ -130,17 +145,24 @@ namespace JBrain
 		m_outputNegative_CascadeProbability(outputNegative_CascadeProbability),
 		m_outputNegative_InSequence_DecreaseDendriteWeight(outputNegative_InSequence_DecreaseDendriteWeight),
 		m_outputNegative_InSequence_BreakConnection(outputNegative_InSequence_BreakConnection),
+		m_outputNegative_CreatePureProcessingNeuron(outputNegative_CreatePureProcessingNeuron),
 		m_noOutput_IncreaseInputDendriteWeight(noOutput_IncreaseInputDendriteWeight),
 	  m_noOutput_AddProcessingNeuronDendrite(noOutput_AddProcessingNeuronDendrite),
 		m_noOutput_IncreaseProcessingNeuronDendriteWeight(noOutput_IncreaseProcessingNeuronDendriteWeight),
 		m_noOutput_AddOutputNeuronDendrite(noOutput_AddOutputNeuronDendrite),
 		m_noOutput_IncreaseOutputNeuronDendriteWeight(noOutput_IncreaseOutputNeuronDendriteWeight),
 		m_noOutput_CreateProcessingNeuron(noOutput_CreateProcessingNeuron),
+		m_noOutput_CreatePureProcessingNeuron(noOutput_CreatePureProcessingNeuron),
 		m_observationProcessor(observationProcessor),
-		m_outputCSV(nullptr)
+		m_usePassthroughInputNeurons(usePassthroughInputNeurons),
+		m_useHDCMode(useHDCMode),
+		m_hdcMinimumDeleteDistance(hdcMinimumDeleteDistance),
+		m_hdcLearnMode(hdcLearnMode),
+		m_outputCSV(nullptr)		
 	{
 		// correct output neuron is set with each process-input call:
 		m_correctOutputNeuron = -1;
+		m_correctOutputAction = -1;
 
 		// Observation size is set by the observation processor:
 		m_observationSize = m_observationProcessor->getExpectedOutputSize();
@@ -183,6 +205,11 @@ namespace JBrain
 	double JBrain_Snap::getChance_WrongGotInput_BreakConnection()
 	{
 		return m_outputNegative_InSequence_BreakConnection * m_overallProbability;
+	}
+
+	double JBrain_Snap::getChance_WrongOutput_CreatePureProcessingNeuron()
+	{
+		return m_overallProbability * m_outputNegative_CreatePureProcessingNeuron;
 	}
 
 	double JBrain_Snap::getChance_Step_CreateProcessingNeuron()
@@ -288,6 +315,11 @@ namespace JBrain
 	{
 		return m_overallProbability * m_noOutput_CreateProcessingNeuron;
 	}
+
+	double JBrain_Snap::getChance_NoOut_CreatePureProcessingNeuron()
+	{
+		return m_overallProbability * m_noOutput_CreatePureProcessingNeuron;
+	}
 	
 	void JBrain_Snap::calculateOverallProbability()
 	{
@@ -330,6 +362,10 @@ namespace JBrain
 
 	void JBrain_Snap::ensureAllInputsUsed()
 	{
+		// This function shouldn't be called if we are using pass-through input neurons:
+		if (m_usePassthroughInputNeurons || m_useHDCMode)
+			return;
+
 		// If there is an input used 0 times, keep creating input neurons:
 		std::vector<unsigned int> inputsUsed = getUsedInputsCount();
 		auto iter = std::find(inputsUsed.begin(), inputsUsed.end(), 0);
@@ -347,16 +383,24 @@ namespace JBrain
 	{
 		// Because they make dendrite connection choices based on what is available, create
 		// input neurons, then processing, then output:
-		for (unsigned int i = 0; i < inputCount; ++i)
-			doCreateInputNeuron();
+		if (m_usePassthroughInputNeurons)
+			createAllPassthroughInputNeurons();
+		else if (!m_useHDCMode)
+		{
+			for (unsigned int i = 0; i < inputCount; ++i)
+				doCreateInputNeuron();
 
-		ensureAllInputsUsed();  // May need to create more input neurons
+			ensureAllInputsUsed();  // May need to create more input neurons
+		
+			for (unsigned int i = 0; i < processingCount; ++i)
+				doCreateProcessingNeuron();
 
-		for (unsigned int i = 0; i < processingCount; ++i)
-			doCreateProcessingNeuron();
-
-		for (unsigned int i = 0; i < m_actionSize; ++i)
-			doCreateOutputNeuron();
+			for (unsigned int i = 0; i < m_actionSize; ++i)
+				doCreateOutputNeuron();
+		}
+		
+		if (m_useHDCMode)
+			doCreateHDCOutputNeurons();
 	}
 
 	bool JBrain_Snap::getEventHappened(double probability)
@@ -379,14 +423,24 @@ namespace JBrain
 			[](JNeuron_Snap* x) {return x != nullptr; }));
 	}
 
-	std::vector<double> JBrain_Snap::processInput(const std::vector<double>& inputs, int sageChoice)
+	std::vector<double> JBrain_Snap::processInput(const std::vector<double>& inputs, const std::vector<double>& sageChoice)
 	{
 		// Set the correct neuron to fire. Output neurons should be in the order that
 		// we output:
-		m_correctOutputNeuron = m_outputNeurons[sageChoice]->m_neuronNumber;
+		if (!m_useHDCMode)
+		{
+			m_correctOutputAction = std::round(sageChoice[0]);
+			m_correctOutputNeuron = m_outputNeurons[m_correctOutputAction]->m_neuronNumber;
+		}
 
 		// Get our processed input vector:
 		m_mostRecentBrainInputs = m_observationProcessor->processInput(inputs);
+		
+		if (m_useHDCMode)
+		{
+			m_hdcSimplifiedInput = m_observationProcessor->getSeparatedInputs_simplified();
+			m_hdcCorrectOutputNeurons = m_observationProcessor->getSeparatedOutputs_simplified(sageChoice);
+		}
 		
 		bool gotResponse = false;
 		std::vector<double> brainOutputs {};
@@ -410,19 +464,159 @@ namespace JBrain
 			// std::cout << "DEBUG_RUN_COUNT >= " << MAX_DRC << ". Probably didn't get a good brain output." << std::endl;
 		}
 
-		// Logging: Check which outputs fired:
-		if (brainOutputs[0] > 0.5)
-			++m_brainOutputZeroFiredCount;
+		// HDC Needs to record when the right/wrong output neuron fires separately
+		if (m_useHDCMode)
+		{
+			for (unsigned int idx = 0; idx < m_hdcCorrectOutputNeurons.size(); ++idx)
+			{
+				// Different way to check
+				/*if (brainOutputs[m_correctOutputAction] > 0.5)
+					++m_correctNeuronFiredCount;
+				else
+					++m_wrongNeuronFiredCount;*/
+			}
+		}
+				
+		// Even if we didn't fire, we've reached the end of handling a single input. Process output events:
+		handleOutputEvents();
 
-		// Both outputs can fire, check independently:
-		if (brainOutputs[1] > 0.5)
-			++m_brainOutputOneFiredCount;
-		
 		return brainOutputs;
+	}
+
+	void JBrain_Snap::handleHDCOutputUpdate(const std::vector<double>& brainOutputs)
+	{
+		static bool allOrNoneRemoval = true;
+
+		// If we got the correct output, check to see if we need to update:
+		if (m_hdcLearnMode == CGP::HDC_LEARN_MODE::NONE)
+		{
+				return;
+		}
+		
+		// If we got the answer perfectly correct, there is no need to update, even in full-mode:
+		if (m_hdcCorrectOutputNeurons == m_hdcSimplifiedOutput)
+			return;
+
+		// At least one output is wrong, create a new processing neuron:
+		unsigned int neuNum = static_cast<unsigned int>(m_allNeurons.size());
+		JNeuron_Snap* tempNeuron = new JNeuron_Snap(CGP::JNEURON_SNAP_TYPE::PROCESSING,
+			neuNum, 1.0, m_actionSize);
+
+		// Add all of the inputs:
+		for (auto inVal : m_hdcSimplifiedInput)
+		{
+			tempNeuron->m_inputNeurons.push_back(inVal);
+			tempNeuron->m_inputWeights.push_back(1.0);
+		}
+
+		// Initial starting fire value is a distance of zero:
+		tempNeuron->m_fireValue = 0;
+
+		// Add it to our output calculations:
+		// Add it to each of our output bucket sets:
+		for (unsigned int outNum = 0; outNum < m_hdcCorrectOutputNeurons.size(); ++outNum)
+		{
+			m_hdcOutputNeurons[outNum][m_hdcCorrectOutputNeurons[outNum]]->m_inputNeurons.push_back(neuNum);
+			m_hdcOutputNeurons[outNum][m_hdcCorrectOutputNeurons[outNum]]->m_inputWeights.push_back(1.0);
+		}
+
+		// Add it to our lists of neurons:
+		++m_processingNeuronCreatedCount;
+		m_allNeurons.push_back(tempNeuron);
+		m_processingNeurons.push_back(tempNeuron);
+
+		// If the wrong neuron had values that were too close, remove them:
+		unsigned int procNeuNum;
+		unsigned int sumDistance = 0;
+		JNeuron_Snap* nPtr = nullptr;
+		JNeuron_Snap* procNeu;
+		for (unsigned int idx = 0; idx < m_hdcOutputNeurons.size(); ++idx)
+		{
+			nPtr = m_hdcOutputNeurons[idx][m_hdcSimplifiedOutput[idx]];
+			sumDistance += nPtr->m_fireValue;
+		}
+
+		// With multiple outputs, we only deal with replacing exactly equal processing neurons.
+		if (sumDistance <= 0)
+		{
+			// There should be exactly 1 value in nPtr's output list:
+			procNeuNum = nPtr->m_outputNeurons[0];
+			doDestroyProcessingNeuron(procNeuNum);
+		}
+	}
+
+	void JBrain_Snap::handleHDCNoOutputUpdate()
+	{
+		// No output usually indicates no training. Warn the user if we aren't training:
+		if (m_hdcLearnMode == CGP::HDC_LEARN_MODE::NONE)
+		{
+			std::cout << "ERROR: No output in HDC mode, but training set to None." << std::endl;
+			return;
+		}
+
+		// No output in HDC mode means we need to add an HDC processing neuron:
+		unsigned int neuNum = static_cast<unsigned int>(m_allNeurons.size());
+		JNeuron_Snap* tempNeuron = new JNeuron_Snap(CGP::JNEURON_SNAP_TYPE::PROCESSING,
+			neuNum, 1.0, m_actionSize);
+
+		// Add all of the inputs:
+		for (auto inVal : m_hdcSimplifiedInput)
+		{
+			tempNeuron->m_inputNeurons.push_back(inVal);
+			tempNeuron->m_inputWeights.push_back(1.0);
+		}
+
+		// Initial starting fire value is a distance of zero:
+		tempNeuron->m_fireValue = 0;
+
+		// Add it to each of our output bucket sets:
+		for (unsigned int outNum = 0; outNum < m_hdcCorrectOutputNeurons.size(); ++outNum)
+		{
+			m_hdcOutputNeurons[outNum][m_hdcCorrectOutputNeurons[outNum]]->m_inputNeurons.push_back(neuNum);
+			m_hdcOutputNeurons[outNum][m_hdcCorrectOutputNeurons[outNum]]->m_inputWeights.push_back(1.0);
+		}
+
+		// Add it to our lists of neurons:
+		++m_processingNeuronCreatedCount;
+		m_allNeurons.push_back(tempNeuron);
+		m_processingNeurons.push_back(tempNeuron);
+	}
+
+	unsigned int JBrain_Snap::readSingleHDCOutput(const std::vector<JNeuron_Snap*>& outBuckets)
+	{
+		std::vector<double> retVal(outBuckets.size(), 0.0);
+
+		// Find the minimum index:
+		unsigned int minIdx = 0;
+		double minVal = outBuckets[0]->m_fireValue;
+		for (unsigned int idx = 1; idx < outBuckets.size(); ++idx)
+		{
+			if (outBuckets[idx]->m_fireValue < minVal)
+			{
+				minIdx = idx;
+				minVal = outBuckets[idx]->m_fireValue;
+			}
+		}
+
+		return minIdx;
+	}
+
+	std::vector<double> JBrain_Snap::readHDCBrainOutput()
+	{
+		m_hdcSimplifiedOutput.clear();
+		for (unsigned int outNum = 0; outNum < m_hdcOutputNeurons.size(); ++outNum)
+		{
+			m_hdcSimplifiedOutput.push_back(readSingleHDCOutput(m_hdcOutputNeurons[outNum]));
+		}
+
+		return m_observationProcessor->processOutput(m_hdcSimplifiedOutput);
 	}
 
 	std::vector<double> JBrain_Snap::readBrainOutput(const unsigned int& stepNumber)
 	{
+		if (m_useHDCMode)
+			return readHDCBrainOutput();
+
 		std::vector<double> retVal {};
 		
 		// Brain outputs should be in the order of the neurons:
@@ -467,14 +661,21 @@ namespace JBrain
 					{
 						outputNeuronFired = true;
 						++m_outputNeuronFiredCount;
-						// Right vs wrong neuron.
-						if (neuNum == m_correctOutputNeuron)
+						if (!m_useHDCMode)  // Handle these events in non-hdc mode:
 						{
-							++m_correctNeuronFiredCount;
-							handleCorrectOutputNeuronFiredEvent(neuNum, stepNumber);
+							// Right vs wrong neuron. It is rare, but possible that they both fire
+							// at the same time and all weights will increase and decrease.
+							if (neuNum == m_correctOutputNeuron)
+							{
+								++m_correctNeuronFiredCount;
+								handleCorrectOutputNeuronFiredEvent(neuNum, stepNumber);
+							}
+							else
+							{
+								++m_wrongNeuronFiredCount;
+								handleWrongOutputNeuronFiredEvent();
+							}
 						}
-						else
-							++m_wrongNeuronFiredCount;
 					}
 					else
 					{
@@ -492,7 +693,28 @@ namespace JBrain
 		for (auto& nPtr : m_allNeurons)
 		{
 			if (nPtr != nullptr)
+			{
 				nPtr->m_fireSteps.clear();
+				if (m_useHDCMode)
+					nPtr->m_fireValue = -1.0;
+			}
+		}
+	}
+
+	void JBrain_Snap::uniformDendriteWeightChange(const double& change)
+	{
+		// HDC Handles weight changes differently:
+		if (m_useHDCMode)
+			return;
+		
+		// For all neurons, change the weight of all dendrites:
+		for (auto nPtr : m_allNeurons)
+		{
+			if (nPtr != nullptr)
+			{
+				for (auto wIter = nPtr->m_inputWeights.begin(); wIter != nPtr->m_inputWeights.end(); ++wIter)
+					*wIter += change;
+			}
 		}
 	}
 
@@ -517,38 +739,115 @@ namespace JBrain
 
 			// If at least 1 output neuron fired, we're done.
 			if (outputNeuronFired = fireAllProcessingAndOutputNeurons(stepNum))
-				break;			
+				break;
 		}
 
 		// Read the output neurons in any case:
 		brainOutputs = readBrainOutput(stepNum);
 
+		// Before resetting the neuron-fires (that we need for decision-making), update the
+		// hdc-specific neurons:
+		if (m_useHDCMode && outputNeuronFired)
+			handleHDCOutputUpdate(brainOutputs);
+
 		if (outputNeuronFired && m_neuronResetAfterOutput)
 			resetAllNeuronFires();
 
-		// Return true of we produced an output:
+		// Return true if we produced an output:
 		return outputNeuronFired;
 	}
 
 	bool JBrain_Snap::setIfInputNeuronFired(const unsigned int& neuronNumber, const int& currentStepNumber)
 	{
 		double sum = 0.0;
-		bool retVal = false;
+		bool neuronFired = false;		
 		auto nPtr = m_allNeurons[neuronNumber];
 
-		// Input neurons use their "m_inputNeurons" vector to refer to brain inputs from external sources:
-		for (unsigned int i = 0; i < nPtr->m_inputNeurons.size(); ++i)
+		// Passthrough input neurons just check to see if their given input is set or not:
+		if (m_usePassthroughInputNeurons)
 		{
-			sum += m_mostRecentBrainInputs[nPtr->m_inputNeurons[i]] * nPtr->m_inputWeights[i];
+			unsigned int inputNumber = nPtr->m_inputNeurons[0];
+			if (m_mostRecentBrainInputs[inputNumber] > 0.1)  // !!! Only works with binary for now !!!
+				neuronFired = true;
+		}
+		else  // Standard input neurons
+		{
+			// Input neurons use their "m_inputNeurons" vector to refer to brain inputs from external sources:
+			for (unsigned int i = 0; i < nPtr->m_inputNeurons.size(); ++i)
+			{
+				sum += m_mostRecentBrainInputs[nPtr->m_inputNeurons[i]] * nPtr->m_inputWeights[i];
+			}
+
+			if (sum >= nPtr->m_fireThreshold)
+			{
+				neuronFired = true;
+			}
 		}
 		
-		if (sum >= nPtr->m_fireThreshold)
+		if (neuronFired)
 		{
+			// Mark that it fired when this was the correct output action:
+			++nPtr->m_firedExpectedOutputCounts[m_correctOutputAction];
 			nPtr->m_fireSteps.push_back(currentStepNumber);
 			++m_inputNeuronFiredCount;
-			retVal = true;
 		}
 		
+		return neuronFired;
+	}
+
+	bool JBrain_Snap::setIfHDCProcessingNeuronFired(JNeuron_Snap* neuron)
+	{
+		int totalDist = 0;
+		assert(neuron->m_inputNeurons.size() == m_hdcSimplifiedInput.size());
+
+		for (unsigned int idx = 0; idx < neuron->m_inputNeurons.size(); ++idx)
+		{
+			totalDist += abs(static_cast<int>(neuron->m_inputNeurons[idx]) -
+				static_cast<int>(m_hdcSimplifiedInput[idx]));
+		}
+
+		neuron->m_fireValue = static_cast<double>(totalDist);
+		++m_processingNeuronFiredCount;
+		return true;
+	}
+
+	bool JBrain_Snap::setIfHDCOutputNeuronFired(JNeuron_Snap* neuron, const unsigned int& stepNumber)
+	{
+		// We only fire beyond the first non-input-neuron step(1).
+		if (stepNumber < 2)
+			return false;
+
+		// Use rounding to deal with potential off-by-a-tiny-amount double errors.
+		// Output neurons don't use their m_outputNeurons variable, so we will use it to track
+		// the neurons that matched our minimum value:
+		neuron->m_fireValue = static_cast<double>(std::numeric_limits<int>::max() - 1);  // Start high, but within int bounds
+		neuron->m_outputNeurons.clear();
+		JNeuron_Snap* nPtr;
+		bool retVal = false;  // Need at least one input to return true
+
+		for (auto inNeuNum : neuron->m_inputNeurons)
+		{
+			nPtr = m_allNeurons[inNeuNum];
+			if (nPtr != nullptr)
+			{
+				retVal = true;
+
+				// With HDC, lower difference is better rather than higher accumulated value:
+				if (static_cast<int>(std::round(nPtr->m_fireValue)) < static_cast<int>(std::round(neuron->m_fireValue)))
+				{
+					neuron->m_fireValue = nPtr->m_fireValue;
+					neuron->m_outputNeurons.clear();
+					neuron->m_outputNeurons.push_back(inNeuNum);
+				}
+				// Found an equal value, add it to the list of evidence:
+				else if (static_cast<int>(std::round(nPtr->m_fireValue)) == static_cast<int>(std::round(neuron->m_fireValue)))
+				{
+					neuron->m_outputNeurons.push_back(inNeuNum);
+				}
+				//else // Do nothing.
+			}
+		}
+
 		return retVal;
 	}
 
@@ -561,6 +860,21 @@ namespace JBrain
 		if (nPtr == nullptr || nPtr->m_type == CGP::JNEURON_SNAP_TYPE::INPUT)
 			return retVal;
 		
+		// In HDC mode, neurons fire-checks work differently:
+		if (m_useHDCMode)
+		{
+			if (nPtr->m_type == CGP::JNEURON_SNAP_TYPE::PROCESSING)
+				return setIfHDCProcessingNeuronFired(nPtr);
+			else if (nPtr->m_type == CGP::JNEURON_SNAP_TYPE::OUTPUT)
+				return setIfHDCOutputNeuronFired(nPtr, currentStepNumber);
+			else
+			{
+				std::cout << "setIfNonInputNeuronFired bad neuron type: "
+					<< CGP::JneuronSnapTypeToString(nPtr->m_type) << std::endl;
+				return false;
+			}
+		}
+
 		double sum = 0.0;
 		// Check every step where the previous neuron firing matters:
 		for (unsigned int checkStep = minAccumulateStep; checkStep <= maxAccumulateStep; ++checkStep)
@@ -597,8 +911,11 @@ namespace JBrain
 
 		if (sum >= nPtr->m_fireThreshold)
 		{
-			retVal = true;			
-			nPtr->m_fireSteps.push_back(currentStepNumber);				
+			retVal = true;
+			nPtr->m_fireSteps.push_back(currentStepNumber);
+
+			// Record that it fired when this was the correct output:
+			++nPtr->m_firedExpectedOutputCounts[m_correctOutputAction];
 		}
 
 		return retVal;
@@ -651,7 +968,7 @@ namespace JBrain
 					idx = static_cast<unsigned int>(iter1 - nPtr->m_inputNeurons.begin());
 					// If this weight should decrease, do so, but don't let it go below the minimum:
 					if (getEventHappened(decreaseWeightChance))
-						nPtr->m_inputWeights[idx] = fmax(nPtr->m_inputWeights[idx] - m_dendriteWeightChange, m_dendriteMinimumWeight);
+						nPtr->m_inputWeights[idx] -= m_dendriteWeightChange;
 
 					// If we should break the connection, do so:
 					if (getEventHappened(breakConnectionChance))
@@ -707,7 +1024,11 @@ namespace JBrain
 				nPtr->m_age = std::min(nPtr->m_age + 1, m_neuronMaximumAge);			
 		}
 		
-		// For each event, check probability and activate if it occurs:
+		// HDC has different update stages for processing/input neurons:
+		if (m_useHDCMode)
+			return;
+
+		// For each event, check probability and activate if it occurs:		
 		if (getEventHappened(getChance_Step_CreateProcessingNeuron()))
 			if (getInsideMaximumProcessingNeuronsCount())
 				doCreateProcessingNeuron();
@@ -725,6 +1046,10 @@ namespace JBrain
 
 	void JBrain_Snap::handleEndOfRunEvents()
 	{
+		// HDC has different update stages for processing/input neurons:
+		if (m_useHDCMode)
+			return;
+
 		// For each event, check probability and activate if it occurs:
 		if (getEventHappened(getChance_Run_CreateProcessingNeuron()))
 			if (getInsideMaximumProcessingNeuronsCount())
@@ -741,9 +1066,42 @@ namespace JBrain
 			doDestroyInputNeuron();
 	}
 
+	// The brain is finished producing a single output from an input:
+	void JBrain_Snap::handleOutputEvents()
+	{
+		// HDC output events get handled BEFORE we reset all neuron fire states:
+		if (m_useHDCMode)
+			return;
+
+		// All weights tick down a bit:
+		uniformDendriteWeightChange(-m_dendriteWeightTickDownAmount);
+
+		// Delete all dendrites with weights below the minimum:
+		deleteAllDendritesWithBelowMinimumWeights();
+
+		// Delete all neurons that now have too few dendrites:
+		deleteAllNeuronsWithTooFewDendrites();
+	}
+
 	// The brain produced no output, some heavy-handed changes:
 	void JBrain_Snap::handleNoOutputEvents()
 	{
+		if (m_useHDCMode)
+		{
+			handleHDCNoOutputUpdate();
+			return;
+		}
+		
+		// Create a new processing neurons BEFORE creating dendrites on output neurons:
+		if (getEventHappened(getChance_NoOut_CreateProcessingNeuron()))
+			if (getInsideMaximumProcessingNeuronsCount())
+				doCreateProcessingNeuron();
+
+		// Create a new pure processing neuron:
+		if (getEventHappened(getChance_NoOut_CreatePureProcessingNeuron()))
+			if (getInsideMaximumProcessingNeuronsCount())
+				doCreatePureProcessingNeuron();
+
 		// Add dendrites to output neurons:
 		for (auto nPtr : m_outputNeurons)
 		{
@@ -758,20 +1116,18 @@ namespace JBrain
 				doAddProcessingNeuronDendrite(nPtr);
 		}
 
-		// Create a new processing neuron:
-		if (getEventHappened(getChance_NoOut_CreateProcessingNeuron()))
-			if (getInsideMaximumProcessingNeuronsCount())
-				doCreateProcessingNeuron();
-
 		// Increase weight of input neuron dendrites:
-		for (auto nPtr : m_inputNeurons)
+		if (!m_usePassthroughInputNeurons)
 		{
-			for (unsigned int idx = 0; idx < nPtr->m_inputWeights.size(); ++idx)
+			for (auto nPtr : m_inputNeurons)
 			{
-				if (getEventHappened(getChance_NoOut_IncreaseInputDendriteWeight()))
-					nPtr->m_inputWeights[idx] = fmin(m_dendriteMaximumWeight, nPtr->m_inputWeights[idx] + m_dendriteWeightChange);
+				for (unsigned int idx = 0; idx < nPtr->m_inputWeights.size(); ++idx)
+				{
+					if (getEventHappened(getChance_NoOut_IncreaseInputDendriteWeight()))
+						nPtr->m_inputWeights[idx] = fmin(m_dendriteMaximumWeight, nPtr->m_inputWeights[idx] + m_dendriteWeightChange);
+				}
 			}
-		}			
+		}
 
 		for (auto nPtr : m_outputNeurons)
 		{
@@ -786,35 +1142,79 @@ namespace JBrain
 	void JBrain_Snap::doAddOutputNeuronDendrite(JNeuron_Snap* outputNeuron)
 	{
 		static std::mt19937_64 gen(std::random_device{}());
+		static double minimumPurity = 0.0;  // Maybe a parameter, eventually?
+		
+		// Values used to make sure we don't end up with all zeros in chances:		
+		static double addedPurity = 0.0001;
+
+		// Determine the output we should be working towards:
+		unsigned int expectedOutput = 0;
+		bool foundNeuron = false;
+
+		for (unsigned int i = 0; i < m_outputNeurons.size(); ++i)
+		{
+			if (m_outputNeurons[i] == outputNeuron)
+			{
+				foundNeuron = true;
+				expectedOutput = i;
+				break;
+			}
+		}
+
+		if (!foundNeuron)
+		{
+			std::cout << "doAddOutputNeuronDendrite called with neuron not in output neurons." << std::endl;
+		}
 
 		if (outputNeuron->m_inputNeurons.size() >= m_dendriteMaxCountPerNeuron)
 			return;
 
-		// Get a list of all processing neurons that we can modify:
-		std::vector<JNeuron_Snap*> possibleInputNeurons{};
-		std::copy(m_processingNeurons.begin(), m_processingNeurons.end(), std::back_inserter(possibleInputNeurons));
+		// Get a list of all processing and input neurons to choose from by gathering all acceptable
+		// neurons from the inputs and processing neuron lists.
+		double tempPurity;
+		std::vector<JNeuron_Snap*> possibleInputNeurons;
+		std::vector<double> chances;
+
+		for (auto nPtr : m_processingNeurons)
+		{
+			tempPurity = nPtr->getFirePurity(expectedOutput);
+			if (tempPurity >= minimumPurity)
+			{
+				possibleInputNeurons.push_back(nPtr);
+				chances.push_back(tempPurity + addedPurity);
+			}
+		}
 
 		// Remove all those we already have a connection to:
+		JNeuron_Snap* findPtr;
+		unsigned int idx;
 		for (auto val : outputNeuron->m_inputNeurons)
 		{
-			auto findPtr = m_allNeurons[val];
+			findPtr = m_allNeurons[val];
 			auto findItr = std::find(possibleInputNeurons.begin(), possibleInputNeurons.end(), findPtr);
 			if (findItr != possibleInputNeurons.end())
+			{
+				idx = findItr - possibleInputNeurons.begin();
 				possibleInputNeurons.erase(findItr);
+				chances.erase(chances.begin() + idx);
+			}
 		}
 
 		// If there are no more in the list, return:
 		if (possibleInputNeurons.size() < 1)
+		{
+			// std::cout << "doAddOutputNeuronDendrite: No input neurons available." << std::endl;
 			return;
+		}
 
-		// Otherwise, create choose from the available neurons:
-		std::uniform_int_distribution<> dist(0, static_cast<int>(possibleInputNeurons.size()) - 1);
-		unsigned int idx = static_cast<unsigned int>(dist(gen));
+		// Otherwise, choose from the available neurons according to their purity:
+		std::discrete_distribution<std::size_t> dist{ chances.begin(), chances.end() };
+		unsigned int neuronNumber = possibleInputNeurons[dist(gen)]->m_neuronNumber;
 
 		// Add our connection to it and its connection to us:
-		outputNeuron->m_inputNeurons.push_back(possibleInputNeurons[idx]->m_neuronNumber);
+		outputNeuron->m_inputNeurons.push_back(neuronNumber);
 		outputNeuron->m_inputWeights.push_back(m_dendriteStartingWeight);
-		possibleInputNeurons[idx]->m_outputNeurons.push_back(outputNeuron->m_neuronNumber);
+		m_allNeurons[neuronNumber]->m_outputNeurons.push_back(outputNeuron->m_neuronNumber);
 	}
 
 	void JBrain_Snap::doAddProcessingNeuronDendrite(JNeuron_Snap* procNeuron)
@@ -885,6 +1285,16 @@ namespace JBrain
 		resetAllLoggingValues();		
 	}
 
+	void JBrain_Snap::handleWrongOutputNeuronFiredEvent()
+	{
+		doChangeUsedDendriteConnectionWeights_AllNeurons(m_dendriteIncorrectWeightChange);
+
+		// Create a pure processing neuron when we make the wrong output:
+		if (getEventHappened(getChance_WrongOutput_CreatePureProcessingNeuron()))
+			if (getInsideMaximumProcessingNeuronsCount())
+				doCreatePureProcessingNeuron();
+	}
+
 	void JBrain_Snap::handleCorrectOutputNeuronFiredEvent(const unsigned int& neuron, const unsigned int& stepNumber)
 	{
 		auto nPtr = m_allNeurons[neuron];
@@ -897,26 +1307,146 @@ namespace JBrain
 		// Fired on step zero shouldn't happen, but just to be careful:
 		if (stepNumber == 0)
 			return;
-		
+
+		// Do the blanket weight change for all neurons that contributed to this outcome:
+		doChangeUsedDendriteConnectionWeights_AllNeurons(m_dendriteCorrectWeightChange);
+
 		// Output neuron fired event doesn't cascade.  It just has a chance to break connections
 		// with neurons that were unused.
 		std::vector<JNeuron_Snap*> firedNeurons = getAllNeuronsFiredOnStep(stepNumber - 1);
 
 		// Go through our inputs. If they aren't in the fired-neuron list, make changes:
-		for (auto inNeuNum : nPtr->m_inputNeurons)
+		if (!m_usePassthroughInputNeurons)
 		{
-			auto nIter = std::find_if(firedNeurons.begin(), firedNeurons.end(),
-				[inNeuNum](JNeuron_Snap* x) {return x->m_neuronNumber == inNeuNum;});
-
-			// Didn't find it in the fired neurons:
-			if (nIter == firedNeurons.end())
+			for (auto inNeuNum : nPtr->m_inputNeurons)
 			{
-				if (getEventHappened(getChance_YesFired_UnusedInput_DecreaseWeight()))
-					doDecreaseDendriteWeight(neuron, inNeuNum);
+				auto nIter = std::find_if(firedNeurons.begin(), firedNeurons.end(),
+					[inNeuNum](JNeuron_Snap* x) {return x->m_neuronNumber == inNeuNum; });
 
-				if (getEventHappened(getChance_YesFired_UnusedInput_BreakConnection()))
-					doDropDendriteConnection(neuron, inNeuNum);
+				// Didn't find it in the fired neurons:
+				if (nIter == firedNeurons.end())
+				{
+					if (getEventHappened(getChance_YesFired_UnusedInput_DecreaseWeight()))
+						doDecreaseDendriteWeight(neuron, inNeuNum);
+
+					if (getEventHappened(getChance_YesFired_UnusedInput_BreakConnection()))
+						doDropDendriteConnection(neuron, inNeuNum);
+				}
 			}
+		}
+	}
+
+	void JBrain_Snap::deleteAllNeuronsWithTooFewDendrites()
+	{
+		JNeuron_Snap* nPtr;
+		// Sort through all neurons, if it isn't used enough, delete it:
+		for (int i = static_cast<int>(m_allNeurons.size()) - 1; i >= 0; --i)
+		{
+			nPtr = m_allNeurons[i];
+			if (nPtr != nullptr && nPtr->m_inputNeurons.size() < m_dendriteMinCountPerNeuron)
+			{
+				if (!m_usePassthroughInputNeurons && nPtr->m_type == CGP::JNEURON_SNAP_TYPE::INPUT)
+					doDestroyInputNeuron(static_cast<const int>(nPtr->m_neuronNumber));
+				else if (nPtr->m_type == CGP::JNEURON_SNAP_TYPE::PROCESSING)
+					doDestroyProcessingNeuron(static_cast<const int>(nPtr->m_neuronNumber));
+				else if (nPtr->m_type == CGP::JNEURON_SNAP_TYPE::OUTPUT)  // Should not happen
+					doAddOutputNeuronDendrite(nPtr);
+				else
+				{
+					std::cout << "Bad type for neuron: " << nPtr->m_neuronNumber
+						<< ": " << CGP::JneuronSnapTypeToString(nPtr->m_type) << std::endl;
+				}				
+			} // end if not null and too few dendrites
+		} // end for all neurons
+	}
+
+	// This function is called assuming that the specified neuron fired on step stepNum and we want to
+	// increase the weight of all dendrites that may have contributed to that. So, for all of the
+	// accumulation steps, if the input neuron fired, we increase the weight to it.
+	void JBrain_Snap::doChangeUsedProcessingDendriteConnectionWeights(const unsigned int& neuronNumber, const unsigned int& stepNum, const double& weightValue)
+	{
+		JNeuron_Snap* nPtr = m_allNeurons[neuronNumber];
+		if (nPtr == nullptr)
+		{
+			std::cout << "doChangeUsedProcessingDendriteConnectionWeights called with a null neuron number." << std::endl;
+			return;
+		}
+
+		// Get the steps we care about:
+		std::vector<unsigned int> steps {};
+		
+		// Need to calculate in signed integers, but then get an unsigned back to avoid rolling
+		// the unsigned value back to a large number if going below zero:
+		unsigned int minStep = static_cast<unsigned int>(
+			std::min(static_cast<int>(stepNum) - static_cast<int>(m_neuronAccumulateDuration), 0) );
+		unsigned int maxStep = stepNum - 1;
+		for (unsigned int step = minStep; step <= maxStep; ++step)
+			steps.push_back(step);
+		
+		// Get which neurons fired during those steps:
+		std::vector<bool> fired = getConnectedNeuronsFiredOnStep(steps, nPtr->m_inputNeurons);
+
+		// The bool vector should line up with our input vector:
+		assert(fired.size() == nPtr->m_inputNeurons.size());
+
+		// For each that fired, change the weight:
+		for (unsigned int i = 0; i < fired.size(); ++i)
+		{
+			if (fired[i])
+			{
+				nPtr->m_inputWeights[i] += weightValue;
+			}
+		}
+	}
+
+	void JBrain_Snap::doChangeUsedProcessingDendriteConnectionWeights(const unsigned int& neuronNumber, const double& weightValue)
+	{
+		JNeuron_Snap* nPtr = m_allNeurons[neuronNumber];
+		if (nPtr == nullptr)
+		{
+			std::cout << "doChangeUsedProcessingDendriteConnectionWeights called with a null neuron number." << std::endl;
+			return;
+		}
+
+		// For every step that this neuron fired, run the update-weight function:
+		for (auto step : nPtr->m_fireSteps)
+			doChangeUsedProcessingDendriteConnectionWeights(neuronNumber, step, weightValue);
+	}
+
+	void JBrain_Snap::doChangeUsedInputDendriteConnectionWeights(const unsigned int& neuronNumber, const double& weightValue)
+	{
+		// Not used with passthrough input neurons:
+		if (m_usePassthroughInputNeurons)
+			return;
+
+		JNeuron_Snap* nPtr = m_allNeurons[neuronNumber];
+		if (nPtr == nullptr)
+		{
+			std::cout << "doChangeUsedInputDendriteConnectionWeights called with a null neuron number." << std::endl;
+			return;
+		}
+
+		// Input neurons use m_inputNeurons to refer to system inputs. For each of those that fired,
+		// change our weight to it:
+		for (unsigned int i = 0; i < nPtr->m_inputNeurons.size(); ++i)
+		{
+			if (m_mostRecentBrainInputs[ nPtr->m_inputNeurons[i] ] > 0.0)
+			{
+				nPtr->m_inputWeights[i] += weightValue;
+			}
+		}		
+	}
+
+	void JBrain_Snap::doChangeUsedDendriteConnectionWeights_AllNeurons(const double& weightValue)
+	{
+		for (auto nPtr : m_allNeurons)
+		{
+			if (nPtr == nullptr)
+				continue;
+			else if (!m_usePassthroughInputNeurons && nPtr->m_type == CGP::JNEURON_SNAP_TYPE::INPUT)
+				doChangeUsedInputDendriteConnectionWeights(nPtr->m_neuronNumber, weightValue);
+			else if (nPtr->m_type != CGP::JNEURON_SNAP_TYPE::INPUT)  // Works for processing or output neurons:
+				doChangeUsedProcessingDendriteConnectionWeights(nPtr->m_neuronNumber, weightValue);
 		}
 	}
 
@@ -934,7 +1464,7 @@ namespace JBrain
 			return;
 		}
 
-		else if (nPtr->m_type == CGP::JNEURON_SNAP_TYPE::INPUT)
+		else if (!m_usePassthroughInputNeurons && nPtr->m_type == CGP::JNEURON_SNAP_TYPE::INPUT)
 		{
 			// For now, assume inputs only fire on step 0. If we're here AND it is step 0, possibly
 			// create dendrites and/or change weights:
@@ -998,6 +1528,9 @@ namespace JBrain
 
 	void JBrain_Snap::doHandleInputNeuronIncreaseWeights(const unsigned int& neuron)
 	{
+		if (m_usePassthroughInputNeurons)
+			return;
+
 		auto nPtr = m_allNeurons[neuron];
 		
 		// If we take input from it AND it fired, increase the weight:
@@ -1012,6 +1545,9 @@ namespace JBrain
 
 	void JBrain_Snap::doHandleInputNeuronCreateConnection(const unsigned int& neuron)
 	{
+		if (m_usePassthroughInputNeurons)
+			return;
+
 		auto nPtr = m_allNeurons[neuron];
 
 		// Don't exceed the maximum:
@@ -1052,6 +1588,9 @@ namespace JBrain
 	
 	void JBrain_Snap::doHandleInputNeuronDecreaseWeights(const unsigned int& neuron)
 	{
+		if (m_usePassthroughInputNeurons)
+			return;
+
 		auto nPtr = m_allNeurons[neuron];
 
 		// If we take input from it AND it fired, decrease the weight:
@@ -1059,7 +1598,7 @@ namespace JBrain
 		{
 			if (m_mostRecentBrainInputs[nPtr->m_inputNeurons[i]] > 0.0)
 			{
-				nPtr->m_inputWeights[i] = fmax(nPtr->m_inputWeights[i] - m_dendriteWeightChange, m_dendriteMinimumWeight);
+				nPtr->m_inputWeights[i] -= m_dendriteWeightChange;
 			}
 		}
 	}
@@ -1162,6 +1701,9 @@ noOutputHappened" << std::endl;
 
 	void JBrain_Snap::doHandleInputNeuronBreakConnection(const unsigned int& neuron)
 	{
+		if (m_usePassthroughInputNeurons)
+			return;
+
 		auto nPtr = m_allNeurons[neuron];
 		
 		// Don't destroy if it lowers our count too far:
@@ -1208,6 +1750,65 @@ noOutputHappened" << std::endl;
 		return retVal;
 	}
 
+	std::vector<bool> JBrain_Snap::getConnectedNeuronsFiredOnStep(const std::vector<unsigned int>& steps,
+		const std::vector<unsigned int>& neuronNumsToCheck)
+	{
+		std::vector<bool> retVal {};
+		bool singleNeuronFire;
+		JNeuron_Snap* nPtr;
+		for (auto nNum : neuronNumsToCheck)
+		{
+			nPtr = m_allNeurons[nNum];
+			singleNeuronFire = false;
+			
+			// Skip null neurons:
+			if (nPtr != nullptr)
+			{
+				// For every neuron, check every step:
+				for (auto step : steps)
+				{
+					if (nPtr->getFiredOnStepNum(step))
+					{
+						// Don't need to know how many times it fired, just true/false.
+						singleNeuronFire = true;
+						break;
+					}
+				} // End for all steps
+			} // End if neuron isn't null
+			
+			retVal.push_back(singleNeuronFire);
+		} // End for all neurons to check
+		
+		return retVal;
+	}
+
+	void JBrain_Snap::doCreateHDCOutputNeurons()
+	{
+		// Get how many output buckets are allowed for each output:
+		std::vector<unsigned int> outBucketSizes = m_observationProcessor->getActionBucketSizes();
+
+		// Create all the output neurons:
+		m_hdcOutputNeurons.clear();
+		std::vector<JNeuron_Snap*> tempOutNeurons;
+		JNeuron_Snap* tempNeuron;
+		unsigned int neuronNumber;
+
+		// For every output, create a number of output neurons equal to the number of buckets
+		// available for that output:
+		for (unsigned int outNum = 0; outNum < outBucketSizes.size(); ++outNum)
+		{
+			tempOutNeurons.clear();
+			for (unsigned int bucketNum = 0; bucketNum < outBucketSizes[outNum]; ++bucketNum)
+			{
+				neuronNumber = static_cast<unsigned int>(m_allNeurons.size());
+				tempNeuron = new JNeuron_Snap(CGP::JNEURON_SNAP_TYPE::OUTPUT, neuronNumber, 1.0, outBucketSizes.size());
+				tempOutNeurons.push_back(tempNeuron);
+				m_allNeurons.push_back(tempNeuron);
+			}
+			m_hdcOutputNeurons.push_back(tempOutNeurons);
+		}
+	}
+
 	void JBrain_Snap::doCreateOutputNeuron()
 	{ 
 		static std::mt19937_64 gen(std::random_device{}());
@@ -1217,7 +1818,8 @@ noOutputHappened" << std::endl;
 		std::copy(m_processingNeurons.begin(), m_processingNeurons.end(), std::back_inserter(possibleInputNeurons));
 
 		unsigned int nNumber = static_cast<unsigned int>(m_allNeurons.size());
-		JNeuron_Snap* newNeuron = new JNeuron_Snap(CGP::JNEURON_SNAP_TYPE::OUTPUT, nNumber, m_neuronFireThreshold);
+		JNeuron_Snap* newNeuron = new JNeuron_Snap(CGP::JNEURON_SNAP_TYPE::OUTPUT, nNumber,
+			m_neuronFireThreshold, m_actionSize);
 
 		// If there aren't enough inputs to satisfy dendrite start count, do our best:
 		if (m_dendriteStartCountPerNeuron > possibleInputNeurons.size())
@@ -1262,16 +1864,82 @@ noOutputHappened" << std::endl;
 			return;
 		}
 
+		// No changes to input neurons if using passthrough input neurons:
+		if (m_usePassthroughInputNeurons && nPtr->m_type == CGP::JNEURON_SNAP_TYPE::INPUT)
+			return;
+
 		// Find the input and decrease the weight:
-		auto inIter = std::find(nPtr->m_inputNeurons.begin(), nPtr->m_inputNeurons.end(), inputNeuronNumber);
+		auto inIter = std::find(nPtr->m_inputNeurons.begin(), nPtr->m_inputNeurons.end(), inputNeuronNumber);		
 		if (inIter != nPtr->m_inputNeurons.end())
 		{
 			unsigned int idx = static_cast<unsigned int>(inIter - nPtr->m_inputNeurons.begin());
 			
 			// Subtract off the amount dendrite weights change:
-			nPtr->m_inputWeights[idx] = fmax(m_dendriteMinimumWeight,
-				nPtr->m_inputWeights[idx] - m_dendriteWeightChange);
+			nPtr->m_inputWeights[idx] -= m_dendriteWeightChange;			
 		}
+	}
+
+	void JBrain_Snap::deleteAllDendritesWithBelowMinimumWeights()
+	{
+		// Check all neurons:
+		for (auto nPtr : m_allNeurons)
+		{
+			if (nPtr == nullptr)
+				continue;
+
+			// Move from the back of the list to the front so we can remove as we go:
+			for (int i = static_cast<int>(nPtr->m_inputWeights.size()) - 1; i >= 0; --i)
+			{
+				if (nPtr->m_inputWeights[i] < m_dendriteMinimumWeight)
+				{
+					doDeleteDendrite(nPtr->m_neuronNumber, static_cast<unsigned int>(i));
+
+					// Output neuorns can't be deleted, so if they have too few dendrites, create more:
+					if (nPtr->m_type == CGP::JNEURON_SNAP_TYPE::OUTPUT)
+					{
+						if (nPtr->m_inputNeurons.size() < m_dendriteMinCountPerNeuron)
+							doAddOutputNeuronDendrite(nPtr);
+					}
+				}
+			}
+		}
+	}
+
+	void JBrain_Snap::doDeleteDendrite(const unsigned int& neuronNumber, const unsigned int& dendriteNumber)
+	{
+		JNeuron_Snap* nPtr = m_allNeurons[neuronNumber];
+		if (nPtr == nullptr)
+		{
+			std::cout << "doDeleteDendrite called with nullptr neuron number." << std::endl;
+			return;
+		}
+
+		// No changes to input neurons if using passthrough input neurons:
+		if (m_usePassthroughInputNeurons && nPtr->m_type == CGP::JNEURON_SNAP_TYPE::INPUT)
+			return;
+
+		// If this wasn't an input neuron, erase from the output neuron we pulled from:
+		if (nPtr->m_type != CGP::JNEURON_SNAP_TYPE::INPUT) 
+		{
+			JNeuron_Snap* iPtr = m_allNeurons[nPtr->m_inputNeurons[dendriteNumber]];
+			if (iPtr != nullptr)
+			{
+				auto outIter = std::find(iPtr->m_outputNeurons.begin(), iPtr->m_outputNeurons.end(), neuronNumber);
+				// This should always be true, but double-check anyway:
+				if (outIter != iPtr->m_outputNeurons.end())
+					iPtr->m_outputNeurons.erase(outIter);
+			}
+			else // BUG
+			{
+				std::cout << "BUG: Neuron " << neuronNumber << " (" << CGP::JneuronSnapTypeToString(nPtr->m_type)
+					<< ") had a pointer to a null neuron in its inputs. [" 
+					<< nPtr->m_inputNeurons[dendriteNumber] << "]." << std::endl;
+			}
+		}
+
+		// Delete it from inputs:
+		nPtr->m_inputNeurons.erase(nPtr->m_inputNeurons.begin() + dendriteNumber);
+		nPtr->m_inputWeights.erase(nPtr->m_inputWeights.begin() + dendriteNumber);
 	}
 
 	void JBrain_Snap::doDropDendriteConnection(const unsigned int& neuronNumber, const unsigned int& inputNeuronNumber)
@@ -1283,14 +1951,106 @@ noOutputHappened" << std::endl;
 			return;
 		}
 
-		// If we find it, eliminate it:
+		// No changes to input neurons if using passthrough input neurons:
+		if (m_usePassthroughInputNeurons && nPtr->m_type == CGP::JNEURON_SNAP_TYPE::INPUT)
+			return;
+
+		// Find that neuron number in our input dendrites:
 		auto inIter = std::find(nPtr->m_inputNeurons.begin(), nPtr->m_inputNeurons.end(), inputNeuronNumber);
+		
+		// If we find it, eliminate it:		
 		if (inIter != nPtr->m_inputNeurons.end())
 		{
 			unsigned int idx = static_cast<unsigned int>(inIter - nPtr->m_inputNeurons.begin());
-			nPtr->m_inputNeurons.erase(nPtr->m_inputNeurons.begin() + idx);
-			nPtr->m_inputWeights.erase(nPtr->m_inputWeights.begin() + idx);
+			doDeleteDendrite(neuronNumber, idx);
 		}
+	}
+
+	void JBrain_Snap::doCreatePureProcessingNeuron()
+	{
+		static double minimumPurity = 0.0;  // Maybe a parameter, eventually?
+		
+		// Values used to make sure we don't end up with all zeros in chances:
+		static double addedPurity = 0.0001;
+
+		static std::mt19937_64 gen(std::random_device{}());		
+		++m_processingNeuronCreatedCount;
+
+		// Get a list of all processing and input neurons to choose from by gathering all acceptable
+		// neurons from the inputs and processing neuron lists.
+		double tempPurity;
+		std::vector<JNeuron_Snap*> possibleInputNeurons;
+		std::vector<double> chances;
+
+		for (auto nPtr : m_inputNeurons)
+		{
+			tempPurity = nPtr->getFirePurity(m_correctOutputAction);
+			if (tempPurity >= minimumPurity)
+			{
+				possibleInputNeurons.push_back(nPtr);
+				chances.push_back(tempPurity + addedPurity);
+			}
+		}
+
+		for (auto nPtr : m_processingNeurons)
+		{
+			tempPurity = nPtr->getFirePurity(m_correctOutputAction);
+			if (tempPurity >= minimumPurity)
+			{
+				possibleInputNeurons.push_back(nPtr);
+				chances.push_back(tempPurity + addedPurity);
+			}
+		}
+
+		// If we don't have enough "pure" inputs, we can't create the neuron:
+		if (possibleInputNeurons.size() < m_dendriteMinCountPerNeuron)
+		{
+			--m_processingNeuronCreatedCount;
+			// std::cout << "Failed to create a pure processing neuron due to too few inputs." << std::endl;
+			return;
+		}
+
+		// Create the neuron:
+		unsigned int nNumber = static_cast<unsigned int>(m_allNeurons.size());
+		JNeuron_Snap* newNeuron = new JNeuron_Snap(CGP::JNEURON_SNAP_TYPE::PROCESSING, nNumber,
+			m_neuronFireThreshold, m_actionSize);
+
+		// There are enough inputs, but not so many that we need to choose among them:
+		if (possibleInputNeurons.size() <= m_dendriteStartCountPerNeuron)
+		{
+			for (auto nPtr : possibleInputNeurons)
+			{
+				newNeuron->m_inputNeurons.push_back(nPtr->m_neuronNumber);
+				newNeuron->m_inputWeights.push_back(m_dendriteStartingWeight);
+				nPtr->m_outputNeurons.push_back(nNumber);
+			}
+		}
+		// More than enough inputs to choose from. Select randomly:
+		else
+		{
+			while (newNeuron->m_inputNeurons.size() < m_dendriteStartCountPerNeuron)
+			{
+				std::discrete_distribution<std::size_t> dist{ chances.begin(), chances.end() };
+				unsigned int neuronNumber;
+
+				// Add until we have the right number of dendrites:
+				while (newNeuron->m_inputNeurons.size() < m_dendriteStartCountPerNeuron)
+				{
+					neuronNumber = possibleInputNeurons[dist(gen)]->m_neuronNumber;
+
+					// Make sure we haven't already selected this one:
+					if (newNeuron->m_inputNeurons.end() != std::find(newNeuron->m_inputNeurons.begin(), newNeuron->m_inputNeurons.end(), neuronNumber))
+						continue;
+
+					newNeuron->m_inputNeurons.push_back(neuronNumber);
+					newNeuron->m_inputWeights.push_back(m_dendriteStartingWeight);
+					m_allNeurons[neuronNumber]->m_outputNeurons.push_back(nNumber);					
+				}
+			}
+		}
+
+		m_processingNeurons.push_back(newNeuron);
+		m_allNeurons.push_back(newNeuron);
 	}
 
 	void JBrain_Snap::doCreateProcessingNeuron()
@@ -1309,7 +2069,8 @@ noOutputHappened" << std::endl;
 		unsigned int maxInputUsage = *std::max_element(inputUsage.begin(), inputUsage.end());
 
 		unsigned int nNumber = static_cast<unsigned int>(m_allNeurons.size());
-		JNeuron_Snap* newNeuron = new JNeuron_Snap(CGP::JNEURON_SNAP_TYPE::PROCESSING, nNumber, m_neuronFireThreshold);
+		JNeuron_Snap* newNeuron = new JNeuron_Snap(CGP::JNEURON_SNAP_TYPE::PROCESSING, nNumber,
+			m_neuronFireThreshold, m_actionSize);
 
 		// If there aren't enough inputs to satisfy dendrite start count, do our best:
 		if (m_dendriteStartCountPerNeuron > static_cast<unsigned int>(possibleInputNeurons.size()))
@@ -1321,7 +2082,7 @@ noOutputHappened" << std::endl;
 				nPtr->m_outputNeurons.push_back(nNumber);
 			}
 		}
-		// There are at least enough. Choose randomly; no favoring implemented, yet:
+		// There are at least enough. Choose randomly.
 		else
 		{
 			while (newNeuron->m_inputNeurons.size() < m_dendriteStartCountPerNeuron)
@@ -1344,16 +2105,44 @@ noOutputHappened" << std::endl;
 
 					newNeuron->m_inputNeurons.push_back(selection);
 					newNeuron->m_inputWeights.push_back(m_dendriteStartingWeight);
+					m_allNeurons[selection]->m_outputNeurons.push_back(nNumber);
 				}
 			}
 		}
+
+		// HDC neurons need a default fire value:
+		if (m_useHDCMode)
+			newNeuron->m_fireValue = std::numeric_limits<double>::max();
 
 		m_allNeurons.push_back(newNeuron);
 		m_processingNeurons.push_back(newNeuron);
 	}
 
+	void JBrain_Snap::createAllPassthroughInputNeurons()
+	{
+		// Create 1 input neuron for each possible input:
+		unsigned int nNumber;
+		for (unsigned int i = 0; i < m_observationSize; ++i)
+		{
+			nNumber = static_cast<unsigned int>(m_allNeurons.size());
+			JNeuron_Snap* tempPtr = new JNeuron_Snap(CGP::JNEURON_SNAP_TYPE::INPUT, nNumber,
+				1.0, m_actionSize);
+			
+			// Record the input we're listening to:
+			tempPtr->m_inputNeurons.push_back(i);
+			tempPtr->m_inputWeights.push_back(1.0);
+
+			m_allNeurons.push_back(tempPtr);
+			m_inputNeurons.push_back(tempPtr);
+		}
+	}
+
 	void JBrain_Snap::doCreateInputNeuron()
 	{
+		// Should never be called when using passthrough input neurons:		
+		if (m_usePassthroughInputNeurons)
+			return;
+
 		++m_inputNeuronCreatedCount;
 
 		// Allocate it once:
@@ -1370,7 +2159,7 @@ noOutputHappened" << std::endl;
 
 		// We always create neurons with neuron # == size of all-neurons-vector:
 		JNeuron_Snap* newNeuron = new JNeuron_Snap(CGP::JNEURON_SNAP_TYPE::INPUT,
-			static_cast<unsigned int>(m_allNeurons.size()), m_neuronFireThreshold);
+			static_cast<unsigned int>(m_allNeurons.size()), m_neuronFireThreshold, m_actionSize);
 
 		// If there are only as many possible inputs as we are creating dendrites, one to each:
 		if (m_dendriteStartCountPerNeuron >= m_observationSize)
@@ -1409,8 +2198,12 @@ noOutputHappened" << std::endl;
 		m_inputNeurons.push_back(newNeuron);
 	}
 
-	void JBrain_Snap::doDestroyInputNeuron()
+	void JBrain_Snap::doDestroyInputNeuron(const int& neuronNumber)
 	{
+		// No changes to input neurons if using passthrough input neurons:
+		if (m_usePassthroughInputNeurons)
+			return;
+
 		static std::mt19937_64 gen(std::random_device{}());
 
 		// Even if we're told to, we don't destroy the last input neuron:
@@ -1419,19 +2212,27 @@ noOutputHappened" << std::endl;
 		
 		++m_inputNeuronDestroyedCount;
 
-		// No favoring factors implemented yet, pick an input neuron at random:		
-		std::uniform_int_distribution<> dist(0, static_cast<int>(m_inputNeurons.size()) - 1);
-		unsigned int ranVal = static_cast<unsigned int>(dist(gen));
+		// No favoring factors implemented yet, pick an input neuron at random if a 
+		// neuronNumber wasn't provided:
+		if (neuronNumber < 0)
+		{
+			std::uniform_int_distribution<> dist(0, static_cast<int>(m_inputNeurons.size()) - 1);
+			unsigned int ranVal = static_cast<unsigned int>(dist(gen));
 
-		// Let delete handle the details:
-		deleteNeuron(m_inputNeurons[ranVal]->m_neuronNumber);
+			// Let delete handle the details:
+			deleteNeuron(m_inputNeurons[ranVal]->m_neuronNumber);
+		}
+		else
+		{
+			deleteNeuron(static_cast<const unsigned int>(neuronNumber));
+		}
 
 		// We can't ignore an input, if we destroyed an input neuron and no longer are reading
 		// all of the inputs, create until we are:
 		ensureAllInputsUsed();
 	}
 
-	void JBrain_Snap::doDestroyProcessingNeuron()
+	void JBrain_Snap::doDestroyProcessingNeuron(const int& neuronNumber)
 	{
 		static std::mt19937_64 gen(std::random_device{}());
 
@@ -1440,6 +2241,14 @@ noOutputHappened" << std::endl;
 			return;
 
 		++m_processingNeuronDestroyedCount;
+
+		// If a neuron number was provided, destroy it. Otherwise go through the work of selecting
+		// a random neuron:
+		if (neuronNumber > 0)
+		{
+			deleteNeuron(static_cast<const unsigned int>(neuronNumber));
+			return;
+		}
 
 		// Build our vector of favors:
 		std::vector<double> chances;
@@ -1480,12 +2289,26 @@ noOutputHappened" << std::endl;
 
 	void JBrain_Snap::deleteNeuron(unsigned int neuronNumber)
 	{
+		JNeuron_Snap* neuronPtr = m_allNeurons[neuronNumber];
+
+		// No changes to input neurons if using passthrough input neurons:		
+		if (neuronPtr != nullptr &&
+			m_usePassthroughInputNeurons &&
+			neuronPtr->m_type == CGP::JNEURON_SNAP_TYPE::INPUT)
+		{
+			return;
+		}
+
 		unsigned int idx;
 
 		// Remove all references:
 		for (auto elem : m_allNeurons)
 		{
 			if (elem == nullptr)
+				continue;
+
+			// HDC Proc neurons update their input values elsewhere:
+			if (m_useHDCMode && elem->m_type == CGP::JNEURON_SNAP_TYPE::PROCESSING)
 				continue;
 
 			// Remove it if it exists as an input:
@@ -1502,11 +2325,10 @@ noOutputHappened" << std::endl;
 			if (outIter != elem->m_outputNeurons.end())
 			{
 				elem->m_outputNeurons.erase(outIter);
-			}			
+			}
 		}
 		
-		// All references from other neurons removed, now make sure it is removed from our neuron lists:
-		JNeuron_Snap* neuronPtr = m_allNeurons[neuronNumber];
+		// All references from other neurons removed, now make sure it is removed from our neuron lists:		
 
 		// For code simplicity, just search all lists. Need to use vector pointers here
 		// to stop it from creating copies and instead modify the real vectors:		
@@ -1547,6 +2369,8 @@ noOutputHappened" << std::endl;
 			m_observationSize = value;
 		else if (name == "ActionSize")
 			m_actionSize = value;
+		else if (name == "HDC_MinimumDeleteDistance")
+			m_hdcMinimumDeleteDistance = value;
 		else
 			retVal = false;
 
@@ -1584,7 +2408,21 @@ noOutputHappened" << std::endl;
 				m_destroyNeuron_FavorYoungerNeurons = !m_destroyNeuron_FavorYoungerNeurons;
 			else
 				m_destroyNeuron_FavorYoungerNeurons = value;
-		}		
+		}
+		else if (name == "UsePassthroughInputNeurons")
+		{
+			if (flipBool)
+				m_usePassthroughInputNeurons = !m_usePassthroughInputNeurons;
+			else
+				m_usePassthroughInputNeurons = value;
+		}
+		else if (name == "UseHDCMode")
+		{
+			if (flipBool)
+				m_useHDCMode = !m_useHDCMode;
+			else
+				m_useHDCMode = value;
+		}
 		else
 			retVal = false;
 
@@ -1607,6 +2445,12 @@ noOutputHappened" << std::endl;
 			m_dendriteMaximumWeight = value;
 		else if (name == "DendriteStartingWeight")
 			m_dendriteStartingWeight = value;
+		else if (name == "DendriteWeightTickDownAmount")
+			m_dendriteWeightTickDownAmount = value;
+		else if (name == "DendriteCorrectWeightChange")
+			m_dendriteCorrectWeightChange = value;
+		else if (name == "DendriteIncorrectWeightChange")
+			m_dendriteIncorrectWeightChange = value;
 		else if (name == "StepCreateNeuronChance")
 			m_stepCreateNeuronChance = value;
 		else if (name == "StepCreateNeuron_BaseCountRatioMultiplier")
@@ -1655,6 +2499,8 @@ noOutputHappened" << std::endl;
 			m_outputNegative_InSequence_DecreaseDendriteWeight = value;
 		else if (name == "OutputNegative_InSequence_BreakConnection")
 			m_outputNegative_InSequence_BreakConnection = value;
+		else if (name == "OutputNegative_CreatePureProcessingNeuron")
+			m_outputNegative_CreatePureProcessingNeuron = value;
 		else if (name == "NoOutput_IncreaseInputDendriteWeight")
 			m_noOutput_IncreaseInputDendriteWeight = value;
 		else if (name == "NoOutput_AddProcessingNeuronDendrite")
@@ -1667,6 +2513,8 @@ noOutputHappened" << std::endl;
 			m_noOutput_IncreaseOutputNeuronDendriteWeight = value;
 		else if (name == "NoOutput_CreateProcessingNeuron")
 			m_noOutput_CreateProcessingNeuron = value;
+		else if (name == "NoOutput_CreatePureProcessingNeuron")
+			m_noOutput_CreatePureProcessingNeuron = value;
 		else
 			retVal = false;
 
@@ -1689,6 +2537,7 @@ noOutputHappened" << std::endl;
 		j["neuronFireThreshold"] = m_neuronFireThreshold;
 		j["neuronMaximumAge"] = m_neuronMaximumAge;
 		j["brainProcessingStepsAllowed"] = m_brainProcessingStepsAllowed;
+		j["usePassthroughInputNeurons"] = m_usePassthroughInputNeurons;
 
 		// Stored so we can pass them in a copy constructor:
 		j["initialInputNeuronCount"] = m_initialInputNeuronCount;
@@ -1701,6 +2550,9 @@ noOutputHappened" << std::endl;
 		j["dendriteMinimumWeight"] = m_dendriteMinimumWeight;
 		j["dendriteMaximumWeight"] = m_dendriteMaximumWeight;
 		j["dendriteStartingWeight"] = m_dendriteStartingWeight;
+		j["dendriteWeightTickDownAmount"] = m_dendriteWeightTickDownAmount;
+		j["dendriteCorrectWeightChange"] = m_dendriteCorrectWeightChange;
+		j["dendriteIncorrectWeightChange"] = m_dendriteIncorrectWeightChange;
 		j["dendriteMinCountPerNeuron"] = m_dendriteMinCountPerNeuron;
 		j["dendriteMaxCountPerNeuron"] = m_dendriteMinCountPerNeuron;
 		j["dendriteStartCountPerNeuron"] = m_dendriteStartCountPerNeuron;
@@ -1747,6 +2599,7 @@ noOutputHappened" << std::endl;
 		j["outputNegative_CascadeProbability"] = m_outputNegative_CascadeProbability;
 		j["outputNegative_InSequence_DecreaseDendriteWeight"] = m_outputNegative_InSequence_DecreaseDendriteWeight;
 		j["outputNegative_InSequence_BreakConnection"] = m_outputNegative_InSequence_BreakConnection;
+		j["outputNegative_CreatePureProcessingNeuron"] = m_outputNegative_CreatePureProcessingNeuron;
 
 		// No Output events:
 		j["noOutput_IncreaseInputDendriteWeight"] = m_noOutput_IncreaseInputDendriteWeight;
@@ -1755,6 +2608,13 @@ noOutputHappened" << std::endl;
 		j["noOutput_AddOutputNeuronDendrite"] = m_noOutput_AddOutputNeuronDendrite;
 		j["noOutput_IncreaseOutputNeuronDendriteWeight"] = m_noOutput_IncreaseOutputNeuronDendriteWeight;
 		j["noOutput_CreateProcessingNeuron"] = m_noOutput_CreateProcessingNeuron;
+		j["noOutput_CreatePureProcessingNeuron"] = m_noOutput_CreatePureProcessingNeuron;
+
+		// HDC-specific variables:
+		j["UseHDCMode"] = m_useHDCMode;
+		j["HDC_MinimumDeleteDistance"] = m_hdcMinimumDeleteDistance;
+		j["HDC_LearnMode"] = CGP::HDCLearnModeToString(m_hdcLearnMode);
+		j["HDC_LearnMode_Original"] = CGP::HDCLearnModeToString(m_hdcLearnMode_original);
 
 		j["allNeurons_size"] = m_allNeurons.size();
 		j["inputNeurons_size"] = m_inputNeurons.size();
@@ -1767,6 +2627,8 @@ noOutputHappened" << std::endl;
 		bool retVal = true;
 		if (name == "DynamicProbabilityUsage")
 			m_dynamicProbabilityUsage = CGP::StringToDynamicProbability(value);
+		else if (name == "HDCLearnMode")
+			m_hdcLearnMode = CGP::StringToHDCLearnMode(value);
 		else if (name == "Name")
 			m_name = value;
 		else
@@ -1792,6 +2654,9 @@ noOutputHappened" << std::endl;
 			other.m_dendriteMinimumWeight,
 			other.m_dendriteMaximumWeight,
 			other.m_dendriteStartingWeight,
+			other.m_dendriteWeightTickDownAmount,
+			other.m_dendriteCorrectWeightChange,
+			other.m_dendriteIncorrectWeightChange,
 			other.m_dendriteMinCountPerNeuron,
 			other.m_dendriteMaxCountPerNeuron,
 			other.m_dendriteStartCountPerNeuron,
@@ -1827,12 +2692,18 @@ noOutputHappened" << std::endl;
 			other.m_outputNegative_CascadeProbability,
 			other.m_outputNegative_InSequence_DecreaseDendriteWeight,
 			other.m_outputNegative_InSequence_BreakConnection,
+			other.m_outputNegative_CreatePureProcessingNeuron,
 			other.m_noOutput_IncreaseInputDendriteWeight,
 			other.m_noOutput_AddProcessingNeuronDendrite,
 			other.m_noOutput_IncreaseProcessingNeuronDendriteWeight,
 			other.m_noOutput_AddOutputNeuronDendrite,
 			other.m_noOutput_IncreaseOutputNeuronDendriteWeight,
 			other.m_noOutput_CreateProcessingNeuron,
+			other.m_noOutput_CreatePureProcessingNeuron,
+			other.m_usePassthroughInputNeurons,
+			other.m_useHDCMode,
+			other.m_hdcMinimumDeleteDistance,
+			other.m_hdcLearnMode_original,
 			other.m_observationProcessor)
 	{}
 

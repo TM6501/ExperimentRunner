@@ -59,7 +59,10 @@ namespace Experiment
 		void initialize(
 			bool useArgMax,
 			int observationSize,
-			int actionSize
+			int actionSize,
+			std::string envName = "CartPole-v1",
+			std::string sageName = "ppo_sage",
+			std::string renderMode = "rgb_array"
 		);
 
 		~GymSageRunner();
@@ -83,10 +86,8 @@ namespace Experiment
 		float getCurrentReward();
 		void getAllStatus(std::vector<double>& recentObs,
 			std::vector<double>& recentAction, bool& envDone, float& reward);
-		
 
-
-
+		bool testStringArguments(std::string stringArg1, std::string stringArg2);
 	}; // End class GymSageRunner
 } // End namespace Experiment
 

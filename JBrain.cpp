@@ -180,7 +180,7 @@ namespace JBrain
 		m_outputDendriteProgramNodes(outputDendriteProgramNodes),
 		m_axonProgramNodes(axonProgramNodes),
 		m_neuronProgramNodes(neuronProgramNodes),
-	    m_CGPDendriteUpdater(nullptr),
+	  m_CGPDendriteUpdater(nullptr),
 		m_CGPOutputDendriteUpdater(nullptr),
 		m_CGPAxonUpdater(nullptr),
 		m_CGPNeuronUpdater(nullptr),

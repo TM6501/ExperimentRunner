@@ -13,7 +13,7 @@ extern unsigned int DEBUG_LEVEL;
 namespace JBrain
 {
 	const float JBrainFactory::MIN_FLOAT_MUTATE_DIFF = 0.01f;
-	const double JBrainFactory::MIN_DOUBLE_MUTATE_DIFF = 0.001;
+	const double JBrainFactory::MIN_DOUBLE_MUTATE_DIFF = 0.0001;
 	
 	JBrainFactory* JBrainFactory::getInstance()
 	{
@@ -23,7 +23,8 @@ namespace JBrain
 	}
 
 	JBrainFactory::JBrainFactory() :
-		m_fullConfig(YAML::Null),	  
+		m_csvTrainingDataProvided(false),
+		m_fullConfig(YAML::Null),
 		m_dendriteConfig(YAML::Null),
 		m_axonConfig(YAML::Null),
 		m_neuronConfig(YAML::Null),
@@ -77,6 +78,16 @@ namespace JBrain
 		m_fullConfig = fullConfig;		
 		m_initialized = true;
 
+		std::string csvFileName = getValueAsString({ "InputOutputProcessing", "TrainingCSV" }, false);
+		if (csvFileName.size() > 3)  // Blank should be used for no-csv-processing
+		{
+			unsigned int obsSize = static_cast<unsigned int>(
+				getConfigAsInt(m_fullConfig["InputOutputProcessing"], "ObservationSize"));
+			unsigned int actSize = static_cast<unsigned int>(
+				getConfigAsInt(m_fullConfig["InputOutputProcessing"], "ActionSize" ));
+			m_csvTrainingDataProvided = readTrainingCSV(csvFileName, obsSize, actSize);
+		}
+
 		getObservationProcessor();
 
 		return goodConfig;
@@ -97,14 +108,20 @@ namespace JBrain
 			namePathTuple("OverallProbability", { "OverallProbability" }),
 			namePathTuple("NeuronFireThreshold", { "NeuronFireThreshold" }),
 			namePathTuple("DendriteWeightChange", { "DendriteWeightChange" }),
-		  namePathTuple("DendriteMinimumWeight", { "MinimumDendriteWeight" }),
-		  namePathTuple("DendriteMaximumWeight", { "MaximumDendriteWeight" }),
-		  namePathTuple("DendriteStartingWeight", { "DendriteStartingWeight" }),
-		  namePathTuple("StepCreateNeuronChance", { "StepEvents", "CreateProcessingNeuron", "StartingChance"}),
-		  namePathTuple("StepCreateNeuron_BaseCountRatioMultiplier", { "StepEvents", "CreateProcessingNeuron", "BaseOverCountRatioMultiplier"}),
-		  namePathTuple("StepCreateInputNeuronChance", { "StepEvents", "CreateInputNeuron", "StartingChance"}),
-		  namePathTuple("StepCreateInputNeuron_ObservationSizeInputNeuronRatioMultiplier",
-			  { "StepEvents", "CreateInputNeuron", "ObservationSizeOverInputNeuronCountMultiplier"}),
+			namePathTuple("DendriteMinimumWeight", { "MinimumDendriteWeight" }),
+			namePathTuple("DendriteMaximumWeight", { "MaximumDendriteWeight" }),
+			namePathTuple("DendriteStartingWeight", { "DendriteStartingWeight" }),
+			namePathTuple("DendriteWeightTickDownAmount",
+				{"OutputEvents", "DecreaseAllDendriteWeights", "DecreaseAmount"}),
+			namePathTuple("DendriteCorrectWeightChange",
+				{ "OutputEvents", "OutputNeuronFired", "CorrectNeuron", "IncreaseAllUsedDendriteConnections", "ChangeAmount"}),
+			namePathTuple("DendriteIncorrectWeightChange",
+				{ "OutputEvents", "OutputNeuronFired", "WrongNeuron", "DecreaseAllUsedDendriteConnections", "ChangeAmount"}),
+			namePathTuple("StepCreateNeuronChance", { "StepEvents", "CreateProcessingNeuron", "StartingChance"}),
+			namePathTuple("StepCreateNeuron_BaseCountRatioMultiplier", { "StepEvents", "CreateProcessingNeuron", "BaseOverCountRatioMultiplier"}),
+			namePathTuple("StepCreateInputNeuronChance", { "StepEvents", "CreateInputNeuron", "StartingChance"}),
+			namePathTuple("StepCreateInputNeuron_ObservationSizeInputNeuronRatioMultiplier",
+				{ "StepEvents", "CreateInputNeuron", "ObservationSizeOverInputNeuronCountMultiplier"}),
 			namePathTuple("StepDestroyNeuronChance", { "StepEvents", "DestroyProcessingNeuron", "StartingChance"}),
 			namePathTuple("StepDestroyNeuron_CountBaseRatioMultiplier",
 				{ "StepEvents", "DestroyProcessingNeuron", "CountOverBaseRatioMultiplier"}),
@@ -130,15 +147,17 @@ namespace JBrain
 			namePathTuple("OutputPositive_NoConnection_InSequence_CreateConnection",
 				{ "OutputEvents", "OutputPositive", "NoConnectionButFiredInSequence_CreateConnection"}),
 			namePathTuple("OutputPositive_YesFire_UnusedInput_DecreaseWeight",
-				{ "OutputEvents", "OutputPositive", "YesFire_UnusedInput_DecreaseWeight"}),
+				{ "OutputEvents", "OutputNeuronFired", "CorrectNeuron", "UnusedInput", "DecreaseWeight"}),
 			namePathTuple("OutputPositive_YesFire_UnusedInput_BreakConnection",
-				{ "OutputEvents", "OutputPositive",  "YesFire_UnusedInput_BreakConnection"}),
+				{ "OutputEvents", "OutputNeuronFired", "CorrectNeuron", "UnusedInput", "BreakConnection"}),
 			namePathTuple("OutputNegative_CascadeProbability",
 				{ "OutputEvents", "OutputNegative", "CascadeProbability"}),
 			namePathTuple("OutputNegative_InSequence_DecreaseDendriteWeight",
 				{ "OutputEvents", "OutputNegative", "FiredInSequence_DecreaseDendriteWeightFromInput"}),
 			namePathTuple("OutputNegative_InSequence_BreakConnection",
 				{ "OutputEvents", "OutputNegative", "FiredInSequence_BreakConnection"}),
+			namePathTuple("OutputNegative_CreatePureProcessingNeuron",
+				{"OutputEvents", "OutputNeuronFired", "WrongNeuron", "CreatePureProcessingNeuron_CorrectOutput"}),
 			namePathTuple("NoOutput_IncreaseInputDendriteWeight",
 				{ "NoOutputEvents", "IncreaseInputDendriteWeight" }),
 			namePathTuple("NoOutput_AddProcessingNeuronDendrite",
@@ -147,7 +166,9 @@ namespace JBrain
 				{ "NoOutputEvents", "IncreaseProcessingNeuronDendriteWeight" }),
 			namePathTuple("NoOutput_AddOutputNeuronDendrite", { "NoOutputEvents", "AddOutputNeuronDendrite" }),
 			namePathTuple("NoOutput_IncreaseOutputNeuronDendriteWeight", { "NoOutputEvents", "IncreaseOutputNeuronDendriteWeight" }),
-			namePathTuple("NoOutput_CreateProcessingNeuron", { "NoOutputEvents", "CreateProcessingNeuron" }) };
+			namePathTuple("NoOutput_CreateProcessingNeuron", { "NoOutputEvents", "CreateProcessingNeuron" }),
+			namePathTuple("NoOutput_CreatePureProcessingNeuron", { "NoOutputEvents", "CreatePureProcessingNeuron_CorrectOutput" }) };
+	
 		return retVal;
 	}
 
@@ -176,16 +197,18 @@ namespace JBrain
 			namePathTuple("DestroyNeuron_FavorFewerConnections", 
 				{ "WeightDestroyProcessingNeuron", "FavorNeuronsWithFewerConnections" }),
 			namePathTuple("DestroyNeuron_FavorYoungerNeurons",
-				{ "WeightDestroyProcessingNeuron", "FavorYoungerNeurons" })			
+				{ "WeightDestroyProcessingNeuron", "FavorYoungerNeurons" })
+			// namePathTuple("UsePassthroughInputNeurons", { "UsePassthroughInputNeurons" }) // not mutable
 		};
 		return retVal;
 	}
 
 	std::vector<namePathTuple> JBrainFactory::getAllStringListMutationParameters_snap()
 	{
-		std::vector<namePathTuple> retVal{};
-
-		retVal.push_back(namePathTuple("DynamicProbabilityUsage", { "DynamicProbabilityApplication" }));
+		static std::vector<namePathTuple> retVal{
+			namePathTuple("DynamicProbabilityUsage", { "DynamicProbabilityApplication" }),
+			namePathTuple("HDCLearnMode", { "HDCMode", "TrainingLearningMode" })
+		};
 
 		return retVal;
 	}
@@ -246,6 +269,12 @@ namespace JBrain
 		return CGP::StringToDynamicProbability(dynName);
 	}
 
+	CGP::HDC_LEARN_MODE JBrainFactory::getRandomHDCLearnMode()
+	{
+		std::string dynName = getConfigStringFromListOfStrings({ "HDCMode", "TrainingLearningMode" });
+		return CGP::StringToHDCLearnMode(dynName);
+	}
+
 	std::string JBrainFactory::getConfigStringFromListOfStrings(const std::vector<std::string>& fullPath)
 	{
 		// Allocate random devices only once:
@@ -277,6 +306,36 @@ namespace JBrain
 			std::uniform_int_distribution<> dist(0, static_cast<int>(toSearch.size()) - 1);
 			unsigned int idx = static_cast<unsigned int>(dist(gen));
 			retVal = toSearch[idx];			
+		}
+
+		// Put the original back in place and return success:
+		m_fullConfig = original;
+		return retVal;
+	}
+
+	int JBrainFactory::getValueAsInt(const std::vector<std::string>& fullPath)
+	{
+		int retVal = -1;
+		bool foundFullPath = true;
+
+		// This copy-in, copy-out functionality makes this class not thread safe:
+		YAML::Node original = YAML::Clone(m_fullConfig);
+		YAML::Node nodeToCheck = m_fullConfig;
+
+		// Move through sub nodes:
+		for (auto configName : fullPath)
+		{
+			if (!nodeToCheck[configName])
+			{
+				foundFullPath = false;
+				break;
+			}
+			nodeToCheck = nodeToCheck[configName];
+		}
+
+		if (foundFullPath)
+		{
+			retVal = nodeToCheck.as<int>();
 		}
 
 		// Put the original back in place and return success:
@@ -826,7 +885,7 @@ namespace JBrain
 		//    retBool remains true;
 		
 		return retBool;
-	}
+	}	
 
 	float JBrainFactory::getRandomFloat(const float& min, const float& max)
 	{
@@ -913,25 +972,99 @@ namespace JBrain
 		return bool(dist(e2) == 0);
 	}
 
+	bool JBrainFactory::readTrainingCSV(std::string& filename, unsigned int& obsSize, unsigned int& actSize)
+	{
+		std::vector<double> tmpObs;
+		std::vector<double> tmpAct;
+		unsigned int idx;
+		std::string word;
+		double tmpVal;
+
+		// Fill the min/max vectors:
+		m_observationMinimums.clear();
+		m_observationMaximums.clear();
+		for (unsigned int i = 0; i < obsSize; ++i)
+		{
+			m_observationMinimums.push_back(std::numeric_limits<double>::max());
+			m_observationMaximums.push_back(std::numeric_limits<double>::min());
+		}
+
+		std::ifstream file(filename.c_str());
+		if (!file.is_open())
+		{
+			std::cout << "Error opening " << filename << std::endl;
+			return false;
+		}
+
+		std::string line;
+		// Discard the top line (header values):
+		std::getline(file, line);
+
+		while (std::getline(file, line))
+		{
+			std::stringstream sstream(line);			
+			idx = 0;
+			tmpObs.clear();
+			tmpAct.clear();
+
+			while (std::getline(sstream, word, ','))
+			{
+				if (idx < obsSize)
+				{
+					tmpVal = std::stod(word);
+					tmpObs.push_back(tmpVal);
+					if (tmpVal < m_observationMinimums[idx])
+						m_observationMinimums[idx] = tmpVal;
+					if (tmpVal > m_observationMaximums[idx])
+						m_observationMaximums[idx] = tmpVal;
+				}
+				else
+					tmpAct.push_back(std::stod(word));
+				
+				++idx;
+			}
+
+			m_csvObservations.push_back(tmpObs);
+			m_csvActions.push_back(tmpAct);
+		}
+
+		file.close();
+		return true;
+	}
+
 	ObservationProcessor* JBrainFactory::getObservationProcessor()
 	{
 		// If we don't have an observation processor yet, create it:
 		if (m_observationProcessor == nullptr)
 		{
 			CGP::INPUT_PREPROCESSING preProc = CGP::StringToInputPreprocessing(
-				getConfigAsString(m_fullConfig["InputProcessing"], "Type", false));
+				getConfigAsString(m_fullConfig["InputOutputProcessing"], "Type", false));
+			
 			unsigned int obsSize = static_cast<unsigned int>(
-				getConfigAsInt(m_fullConfig["InputProcessing"], "ObservationSize"));
-			unsigned int buckets = static_cast<unsigned int>(
-				getConfigAsInt(m_fullConfig["InputProcessing"], "BucketsPerInput"));
+				getValueAsInt({ "InputOutputProcessing", "ObservationSize" }));
+			unsigned int actSize = static_cast<unsigned int>(
+				getValueAsInt({ "InputOutputProcessing", "ActionSize" }));
+
+			std::vector<unsigned int> bucketCounts = 
+				m_fullConfig["InputOutputProcessing"]["BucketsPerInput"].as<std::vector<unsigned int> >();				
+			std::vector<unsigned int> actBucketCounts = 
+				m_fullConfig["InputOutputProcessing"]["BucketsPerOutput"].as<std::vector<unsigned int> >();
 			std::vector<std::vector<double> > obsRanges;
-			for (auto innerList : m_fullConfig["InputProcessing"]["ObsRanges"])
+			for (auto innerList : m_fullConfig["InputOutputProcessing"]["ObsRanges"])
 			{
 				// Should always be of length 2:
 				obsRanges.push_back(std::vector<double>{ innerList[0].as<double>(), innerList[1].as<double>() });
 			}
 
-			m_observationProcessor = new ObservationProcessor(preProc, obsSize, obsRanges, buckets);
+			std::vector<std::vector<double> > actRanges;
+			for (auto innerList : m_fullConfig["InputOutputProcessing"]["ActionRanges"])
+			{
+				// Should always be length 2:
+				actRanges.push_back(std::vector<double> {innerList[0].as<double>(), innerList[1].as<double>() });
+			}
+
+			m_observationProcessor = new ObservationProcessor(preProc, obsSize, obsRanges, bucketCounts,
+				actSize, actRanges, actBucketCounts);
 		}
 
 		return m_observationProcessor;
@@ -963,11 +1096,14 @@ namespace JBrain
 			getRandomListConfigAsDouble({ "MinimumDendriteWeight" }), // dendriteMinimumWeight
 			getRandomListConfigAsDouble({ "MaximumDendriteWeight" }), // dendriteMaximumWeight
 			getRandomListConfigAsDouble({ "DendriteStartingWeight" }), // dendriteStartingWeight
+			getRandomListConfigAsDouble({ "OutputEvents", "DecreaseAllDendriteWeights", "DecreaseAmount"}), // dendriteWeightTickDownAmount
+			getRandomListConfigAsDouble({ "OutputEvents", "OutputNeuronFired", "CorrectNeuron", "IncreaseAllUsedDendriteConnections", "ChangeAmount"}), // dendriteCorrectWeightChange
+			getRandomListConfigAsDouble({ "OutputEvents", "OutputNeuronFired", "WrongNeuron", "DecreaseAllUsedDendriteConnections", "ChangeAmount" }), // dendriteIncorrectWeightChange
 			static_cast<unsigned int>(getRandomListConfigAsInt({ "MinimumDendritesPerNeuron" })), // dendriteMinCountPerNeuron
 			static_cast<unsigned int>(getRandomListConfigAsInt({ "MaximumDendritesPerNeuron" })), // dendriteMaxCountPerNeuron
 			static_cast<unsigned int>(getRandomListConfigAsInt({ "StartingDendritesPerNeuron" })), // dendriteStartCountPerNeuron
 			static_cast<unsigned int>(getRandomListConfigAsInt({ "BaseProcessingNeuronCount" })), // baseProcessingNeuronCount
-			static_cast<unsigned int>(getRandomListConfigAsInt({ "EnvironmentDetails", "ActionSize" })), // actionSize,
+			static_cast<unsigned int>(getValueAsInt({ "InputOutputProcessing", "ActionSize" })), // actionSize,
 			static_cast<unsigned int>(getRandomListConfigAsInt({ "StartingInputNeuronCount" })), // initialInputNeuronCount
 			static_cast<unsigned int>(getRandomListConfigAsInt({ "StartingProcessingNeuronCount" })), // initialProcessingNeuronCount
 			static_cast<unsigned int>(getRandomListConfigAsInt({ "MaximumProcessingNeuronCount" })), // maximumProcessingNeuronCount
@@ -993,17 +1129,23 @@ namespace JBrain
 			getRandomListConfigAsDouble({ "OutputEvents", "OutputPositive", "CascadeProbability" }),  //outputPositive_CascadeProbability,
 			getRandomListConfigAsDouble({ "OutputEvents", "OutputPositive", "FiredInSequence_IncreaseDendriteWeightFromInput" }),  //outputPositive_InSequence_IncreaseDendriteWeight,
 			getRandomListConfigAsDouble({ "OutputEvents", "OutputPositive", "NoConnectionButFiredInSequence_CreateConnection" }),  //outputPositive_NoConnection_InSequence_CreateConnection,
-			getRandomListConfigAsDouble({ "OutputEvents", "OutputPositive", "YesFire_UnusedInput_DecreaseWeight" }),  //outputPositive_YesFire_UnusedInput_DecreaseWeight,
-			getRandomListConfigAsDouble({ "OutputEvents", "OutputPositive", "YesFire_UnusedInput_BreakConnection" }),  //outputPositive_YesFire_UnusedInput_BreakConnection,
+			getRandomListConfigAsDouble({ "OutputEvents", "OutputNeuronFired", "CorrectNeuron", "UnusedInput", "DecreaseWeight" }),  //outputPositive_YesFire_UnusedInput_DecreaseWeight,
+			getRandomListConfigAsDouble({ "OutputEvents", "OutputNeuronFired", "CorrectNeuron", "UnusedInput", "BreakConnection" }),  //outputPositive_YesFire_UnusedInput_BreakConnection,
 			getRandomListConfigAsDouble({ "OutputEvents", "OutputNegative", "CascadeProbability" }),  //outputNegative_CascadeProbability,
 			getRandomListConfigAsDouble({ "OutputEvents", "OutputNegative", "FiredInSequence_DecreaseDendriteWeightFromInput" }),  //outputNegative_InSequence_DecreaseDendriteWeight,
 			getRandomListConfigAsDouble({ "OutputEvents", "OutputNegative", "FiredInSequence_BreakConnection" }),  //outputNegative_InSequence_BreakConnection,
+			getRandomListConfigAsDouble({ "OutputEvents", "OutputNeuronFired", "WrongNeuron", "CreatePureProcessingNeuron_CorrectOutput"}), // outputNegative_CreatePureProcessingNeuron
 			getRandomListConfigAsDouble({ "NoOutputEvents", "IncreaseInputDendriteWeight" }),  //NoOutput_IncreaseInputDendriteWeight,
 			getRandomListConfigAsDouble({ "NoOutputEvents", "AddProcessingNeuronDendrite" }),  //NoOutput_AddProcessingNeuronDendrite,
 			getRandomListConfigAsDouble({ "NoOutputEvents", "IncreaseProcessingNeuronDendriteWeight" }),  //NoOutput_IncreaseProcessingNeuronDendriteWeight,
 			getRandomListConfigAsDouble({ "NoOutputEvents", "AddOutputNeuronDendrite" }),  //NoOutput_AddOutputNeuronDendrite,
 			getRandomListConfigAsDouble({ "NoOutputEvents", "IncreaseOutputNeuronDendriteWeight" }),  //NoOutput_IncreaseOutputNeuronDendriteWeight,
 			getRandomListConfigAsDouble({ "NoOutputEvents", "CreateProcessingNeuron" }),  //NoOutput_CreateProcessingNeuron,
+			getRandomListConfigAsDouble({ "NoOutputEvents", "CreatePureProcessingNeuron_CorrectOutput" }),  //NoOutput_CreateProcessingNeuron
+			getRandomConfigAsBool( {"UsePassthroughInputNeurons" }),
+			getRandomConfigAsBool( {"HDCMode", "Active"}),			
+			static_cast<unsigned int>(getRandomListConfigAsInt({ "HDCMode", "MinimumDeleteDistance" })),
+			getRandomHDCLearnMode(), // hdcLearnMode
 			obsProc); // observation processor
 
 		return retVal;
@@ -1074,7 +1216,7 @@ namespace JBrain
 			getFloatFromConfigRange(m_axonConfig, "MinMoveAmount", "MaxMoveAmount"), // axonAwayTowardMoveAmount
 			getConfigAsMutableBool(m_neuronConfig, "FireProbabilistic"),  // neuronProbabilisticFire
 			getFloatFromConfigRange(m_neuronConfig, "MinFireThreshold", "MaxFireThreshold"),  // neuronFireThreshold
-            getFloatFromConfigRange(m_neuronConfig, "MinMinFireValue", "MaxMinFireValue"), // neuronMinFireValue
+      getFloatFromConfigRange(m_neuronConfig, "MinMinFireValue", "MaxMinFireValue"), // neuronMinFireValue
 			getFloatFromConfigRange(m_neuronConfig, "MinMaxFireValue", "MaxMaxFireValue"), // neuronMaxFireValue
 			getConfigAsMutableBool(m_neuronConfig, "UseDynamicFireThresholds"), // neuronUseDynamicFireThresholds
 			getFloatFromConfigRange(m_neuronConfig, "MinFireThresholdIdleChange", "MaxFireThresholdIdleChange"), // neuronDynamicFireThresholdIdleChange
@@ -1350,6 +1492,20 @@ namespace JBrain
 		}			
 
 		return retVal;
+	}
+
+	bool JBrainFactory::getHDCModeSet()
+	{
+		std::string boolString = getValueAsString({"HDCMode", "Active"}, true);
+		if (boolString == "true")
+			return true;
+		else if (boolString == "false")
+			return false;
+		else
+		{
+			std::cout << "ERROR: Mutable HDCMode. HDCMode must be true or false; it cannot mutate." << std::endl;
+			return false;
+		}
 	}
 
 	std::vector<JBrain_Snap*> JBrainFactory::getFullMutatedPopulation(JBrain_Snap* parent)

@@ -49,7 +49,8 @@ namespace Experiment
 		// Py_CLEAR(m_gcModule);
 	}
 
-	void GymSageRunner::initialize(bool useArgMax, int observationSize, int actionSize)
+	void GymSageRunner::initialize(bool useArgMax, int observationSize, int actionSize,
+		std::string envName, std::string sageFileName, std::string renderMode)
 	{
 		// Don't repeat the initialization process:
 		if (!m_initialized)
@@ -65,8 +66,15 @@ namespace Experiment
 				exit(-1);
 			}
 
-			// Load up the environment and agent:
-			PyObject_CallNoArgs(m_loadFunc);
+			// Create the load arguments and call the function:
+			PyObject* pArgs = PyTuple_New(3);
+			PyTuple_SetItem(pArgs, 0, PyUnicode_FromString(envName.c_str()));
+			PyTuple_SetItem(pArgs, 1, PyUnicode_FromString(sageFileName.c_str()));
+			PyTuple_SetItem(pArgs, 2, PyUnicode_FromString(renderMode.c_str()));
+			PyObject_CallObject(m_loadFunc, pArgs);
+			
+			// Clean up the arguments:
+			Py_DECREF(pArgs);
 		}
 	}
 
@@ -284,6 +292,29 @@ namespace Experiment
 		// Reward resets to zero:
 		m_currentReward = 0.0;
 		m_environmentDone = false;
+
+		return true;
+	}
+
+	bool GymSageRunner::testStringArguments(std::string stringArg1, std::string stringArg2)
+	{
+		PyObject* pTestFunc = PyObject_GetAttrString(m_sageRunnerInstance, "testStringArguments");
+		if (pTestFunc == nullptr)
+		{
+			PyErr_Print();
+			return false;
+		}
+
+		// Set the args:
+		PyObject* pArgs = PyTuple_New(2);
+		PyTuple_SetItem(pArgs, 0, PyUnicode_FromString(stringArg1.c_str()));
+		PyTuple_SetItem(pArgs, 1, PyUnicode_FromString(stringArg2.c_str()));
+
+		// Call the function:
+		PyObject_CallObject(pTestFunc, pArgs);
+
+		Py_DECREF(pTestFunc);
+		Py_DECREF(pArgs);
 
 		return true;
 	}

@@ -60,6 +60,7 @@ namespace JBrain
 		double getChance_YesFired_UnusedInput_BreakConnection();
 		double getChance_WrongGotInput_DecreaseWeight();
 		double getChance_WrongGotInput_BreakConnection();
+		double getChance_WrongOutput_CreatePureProcessingNeuron();
 		double getChance_Step_CreateProcessingNeuron();
 		double getChance_Step_DestroyProcessingNeuron();
 		double getChance_Step_CreateInputNeuron();
@@ -74,6 +75,7 @@ namespace JBrain
 		double getChance_NoOut_AddOutputNeuronDendrite();
 		double getChance_NoOut_IncreaseOutputNeuronDendriteWeight();
 		double getChance_NoOut_CreateProcessingNeuron();
+		double getChance_NoOut_CreatePureProcessingNeuron();
 
 		unsigned int getNeuronCount(); // Get a count of non-null neurons we have
 
@@ -92,6 +94,7 @@ namespace JBrain
 		double m_neuronFireThreshold;
 		unsigned int m_neuronMaximumAge;
 		unsigned int m_brainProcessingStepsAllowed;
+		bool m_usePassthroughInputNeurons;
 
 		// Stored so we can pass them in a copy constructor:
 		unsigned int m_initialInputNeuronCount;
@@ -107,6 +110,11 @@ namespace JBrain
 		unsigned int m_dendriteMinCountPerNeuron;
 		unsigned int m_dendriteMaxCountPerNeuron;
 		unsigned int m_dendriteStartCountPerNeuron;
+		double m_dendriteWeightTickDownAmount; // After every output, the amount all weight decrease.
+		
+		// How much we reinforce or discourage for each correct or incorrect answer:
+		double m_dendriteCorrectWeightChange;
+		double m_dendriteIncorrectWeightChange;
 
 		// Base neuron count is used to regulate the neuron-creation and neuron-destruction chances:
 		unsigned int m_baseProcessingNeuronCount;
@@ -115,6 +123,10 @@ namespace JBrain
 		unsigned int m_observationSize;
 		unsigned int m_actionSize;
 		int m_correctOutputNeuron;  // The neuron we WANT to fire, based on the sage choice.
+		int m_correctOutputAction; // The most recent sage choice.
+
+		// If using multiple outputs (only in HDC, for now), we need more correct-information:
+		
 
 		// Step-Events:
 		double m_stepCreateNeuronChance;
@@ -151,6 +163,10 @@ namespace JBrain
 		double m_outputNegative_CascadeProbability;
 		double m_outputNegative_InSequence_DecreaseDendriteWeight;
 		double m_outputNegative_InSequence_BreakConnection;
+		
+		// This event is output-negative, but only triggers on wrong output neuron firing, not just
+		// receiving input:
+		double m_outputNegative_CreatePureProcessingNeuron;
 
 		// No Output events:
 		double m_noOutput_IncreaseInputDendriteWeight;
@@ -159,6 +175,16 @@ namespace JBrain
 		double m_noOutput_AddOutputNeuronDendrite;
 		double m_noOutput_IncreaseOutputNeuronDendriteWeight;
 		double m_noOutput_CreateProcessingNeuron;
+		double m_noOutput_CreatePureProcessingNeuron;
+
+		// Usage of hyperdimensional computing mode and its variables:
+		bool m_useHDCMode;
+		unsigned int m_hdcMinimumDeleteDistance;
+		std::vector<unsigned int> m_hdcSimplifiedInput;	
+		std::vector<unsigned int> m_hdcCorrectOutputNeurons; // From the sage
+		std::vector<unsigned int> m_hdcSimplifiedOutput; // Our decision
+		CGP::HDC_LEARN_MODE m_hdcLearnMode;
+		CGP::HDC_LEARN_MODE m_hdcLearnMode_original; // Saved to pass to copied children
 
 		// A single observation processor pointer is held by all brains. The factory allocates it for us:
 		ObservationProcessor* m_observationProcessor;
@@ -184,19 +210,40 @@ namespace JBrain
 		void handleStepEvents();
 		void handleEndOfRunEvents();
 		void handleNoOutputEvents();
+		void handleOutputEvents();
 
 		// Implementation of events:
-		void doCreateProcessingNeuron();
-		void doDestroyProcessingNeuron();
+		void doCreateProcessingNeuron();		
+		// "Pure" processing neurons establish dendrite connections to inputs and other processing
+		// neurons most likely to fire when the expected output matches current output.
+		void doCreatePureProcessingNeuron();
+		void doDestroyProcessingNeuron(const int& neuronNumber = -1);
 		void doCreateInputNeuron();
-		void doDestroyInputNeuron();
+		void createAllPassthroughInputNeurons();
+		void doDestroyInputNeuron(const int& neuronNumber = -1);
 		void doCreateOutputNeuron();
+		void doCreateHDCOutputNeurons();
 		void doDecreaseDendriteWeight(const unsigned int& neuronNumber, const unsigned int& inputNeuronNumber);
 		void doDropDendriteConnection(const unsigned int& neuronNumber, const unsigned int& inputNeuronNumber);
+		
+		// Uniform decrease of all dendrite weights as a tick-down that removes unused connections:
+		void uniformDendriteWeightChange(const double& change);
+
+		// Change the weight values for all neuron connections used. This means any neuron that fired,
+		// all inputs that contributed to that firing will be changed.
+		void doChangeUsedDendriteConnectionWeights_AllNeurons(const double& weightValue);
+		void doChangeUsedProcessingDendriteConnectionWeights(const unsigned int& neuronNumber, const double& weightValue);
+		void doChangeUsedInputDendriteConnectionWeights(const unsigned int& neuronNumber, const double& weightValue);
+		void doChangeUsedProcessingDendriteConnectionWeights(const unsigned int& neuronNumber, const unsigned int& stepNum, const double& weightValue);
 
 		// Events that only occur when the brain fails to produce output:
 		void doAddOutputNeuronDendrite(JNeuron_Snap* outputNeuron);
 		void doAddProcessingNeuronDendrite(JNeuron_Snap* procNeuron);
+
+		// Clean up unneeded dendrites/neurons:
+		void deleteAllNeuronsWithTooFewDendrites();
+		void deleteAllDendritesWithBelowMinimumWeights();
+		void doDeleteDendrite(const unsigned int& neuronNumber, const unsigned int& dendriteNumber);
 
 		// Recursive functions that cascade through contributing neurons:
 		void handleCorrectOutputNeuronGotInputEvent(const unsigned int& neuron, const unsigned int& stepNumber,
@@ -204,6 +251,8 @@ namespace JBrain
 		void handleWrongOutputNeuronGotInputEvent(const unsigned int& neuron, const unsigned int& stepNumber,
 			double decreaseWeightChance = -1.0, double breakConnectionChance = -1.0);
 		void handleCorrectOutputNeuronFiredEvent(const unsigned int& neuron, const unsigned int& stepNumber);
+
+		void handleWrongOutputNeuronFiredEvent();
 
 		// Non-recursive special-casing for input neurons:
 		void doHandleInputNeuronIncreaseWeights(const unsigned int& neuron);
@@ -213,12 +262,15 @@ namespace JBrain
 
 		// Get lists of neurons:
 		std::vector<JNeuron_Snap*> getAllNeuronsFiredOnStep(const unsigned int& stepNumber);
+		std::vector<bool> getConnectedNeuronsFiredOnStep(const std::vector<unsigned int>& steps,
+			const std::vector<unsigned int>& neuronNumsToCheck);
 
 		// This vector holds all neurons, in order and will store nullptrs when neurons are deleted.
 		// This is to make for easy access by ensuring that m_allNeurons[X] is always neuron number X.
 		std::vector<JNeuron_Snap*> m_allNeurons;
 		std::vector<JNeuron_Snap*> m_inputNeurons;
 		std::vector<JNeuron_Snap*> m_processingNeurons; // Need to be kept in order of outputs
+		std::vector<std::vector<JNeuron_Snap*> > m_hdcOutputNeurons; // Multiple outputs
 		std::vector<JNeuron_Snap*> m_outputNeurons;
 
 		// Remove all references to this neuron, then delete it. Remove it from the neuron storage
@@ -230,6 +282,13 @@ namespace JBrain
 		bool setIfNonInputNeuronFired(const unsigned int& neuronNumber, const int& currentStepNumber,
 																	const unsigned int& minAccumulateStep, const unsigned int& maxAccumulateStep);
 
+		// HDC-specific functions:
+		bool setIfHDCProcessingNeuronFired(JNeuron_Snap* neuron);
+		bool setIfHDCOutputNeuronFired(JNeuron_Snap* neuron, const unsigned int& stepNumber);
+		std::vector<double> readHDCBrainOutput();
+		unsigned int readSingleHDCOutput(const std::vector<JNeuron_Snap*>& outBuckets);
+		void handleHDCOutputUpdate(const std::vector<double>& brainOutputs);
+		void handleHDCNoOutputUpdate();
 
 		std::ofstream* m_outputCSV;
 		unsigned int m_correctNeuronFiredCount;
@@ -266,6 +325,9 @@ namespace JBrain
 			const double& dendriteMinimumWeight,
 			const double& dendriteMaximumWeight,
 			const double& dendriteStartingWeight,
+			const double& dendriteWeightTickDownAmount,
+			const double& dendriteCorrectWeightChange,
+			const double& dendriteIncorrectWeightChange,
 			const unsigned int& dendriteMinCountPerNeuron,
 			const unsigned int& dendriteMaxCountPerNeuron,
 			const unsigned int& dendriteStartCountPerNeuron,
@@ -301,15 +363,21 @@ namespace JBrain
 			const double& outputNegative_CascadeProbability,
 			const double& outputNegative_InSequence_DecreaseDendriteWeight,
 			const double& outputNegative_InSequence_BreakConnection,
+			const double& outputNegative_CreatePureProcessingNeuron,
 			const double& noOutput_IncreaseInputDendriteWeight,
 			const double& noOutput_AddProcessingNeuronDendrite,
 			const double& noOutput_IncreaseProcessingNeuronDendriteWeight,
 			const double& noOutput_AddOutputNeuronDendrite,
 			const double& noOutput_IncreaseOutputNeuronDendriteWeight,
 			const double& noOutput_CreateProcessingNeuron,
+			const double& noOutput_CreatePureProcessingNeuron,
+			const bool& usePassthroughInputNeurons,
+			const bool& useHDCMode,
+			const unsigned int& hdcMinimumDeleteDistance,
+			const CGP::HDC_LEARN_MODE& hdcLearnMode,
 			ObservationProcessor* observationProcessor);
 
-		std::vector<double> processInput(const std::vector<double>& inputs, int sageChoice);
+		std::vector<double> processInput(const std::vector<double>& inputs, const std::vector<double>& sageChoice);
 		void getFullTrialStatistics(unsigned int& noOutputEvents, unsigned int& goodOutputs, unsigned int& badOutputs,
 			unsigned int& procNeuronCreated, unsigned int& procNeuronDestroyed,
 			unsigned int& inputNeuronCreated, unsigned int& inputNeuronDestroyed);
